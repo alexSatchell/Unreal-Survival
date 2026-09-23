@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Enums/SurvivalRoundState.h"
 #include "GameFramework/GameModeBase.h"
 #include "TimerManager.h"
 #include "SurvivalGameMode.generated.h"
@@ -13,11 +14,11 @@ class SURVIVAL_API ASurvivalGameMode : public AGameModeBase
 public:
 	ASurvivalGameMode();
 
+protected:
 	virtual void BeginPlay() override;
 
 private:
-	void BeginInProgressState();
-	void BeginFinishedState();
+	void TransitionToRoundState(ESurvivalRoundState NewState);
 
 	FTimerHandle RoundStateTimerHandle;
 };
