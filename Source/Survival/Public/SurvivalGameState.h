@@ -2,15 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
+#include "Enums/SurvivalRoundState.h"
 #include "SurvivalGameState.generated.h"
-
-UENUM(BlueprintType)
-enum class ESurvivalRoundState : uint8
-{
-	Waiting UMETA(DisplayName = "Waiting"),
-	InProgress UMETA(DisplayName = "In Progress"),
-	Finished UMETA(DisplayName = "Finished")
-};
 
 UCLASS()
 class SURVIVAL_API ASurvivalGameState : public AGameStateBase
@@ -21,16 +14,16 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_RoundState, BlueprintReadOnly, Category = "Round")
 	ESurvivalRoundState RoundState = ESurvivalRoundState::Waiting;
 
-protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
+	// friend class will let GameMode access private members of this class
 	friend class ASurvivalGameMode;
 
-	void SetRoundState(ESurvivalRoundState NewState);
+	void SetRoundState(const ESurvivalRoundState NewState);
 
 	UFUNCTION()
-	void OnRep_RoundState(ESurvivalRoundState PreviousRoundState);
+	void OnRep_RoundState(const ESurvivalRoundState PreviousRoundState) const;
 
 	bool bHasInitializedRoundState = false;
 };
