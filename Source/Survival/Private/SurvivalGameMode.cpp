@@ -27,8 +27,7 @@ void ASurvivalGameMode::BeginPlay()
 		return;
 	}
 
-	GetWorldTimerManager().SetTimer( RoundStateTimerHandle, FTimerDelegate::CreateUObject( this, &ASurvivalGameMode::TransitionToRoundState,
-		ESurvivalRoundState::InProgress), 5.0f, false);
+	GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::InProgress), 5.0f, false);
 }
 
 void ASurvivalGameMode::TransitionToRoundState(const ESurvivalRoundState NewState)
@@ -45,7 +44,6 @@ void ASurvivalGameMode::TransitionToRoundState(const ESurvivalRoundState NewStat
 
 	if (NewState == ESurvivalRoundState::InProgress)
 	{
-		GetWorldTimerManager().SetTimer( RoundStateTimerHandle, FTimerDelegate::CreateUObject( this, &ASurvivalGameMode::TransitionToRoundState,
-			ESurvivalRoundState::Finished), 60.0f, false);
+		GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::Finished), 60.0f, false);
 	}
 }

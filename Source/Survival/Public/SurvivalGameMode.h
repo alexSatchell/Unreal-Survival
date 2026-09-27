@@ -18,7 +18,7 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	void TransitionToRoundState(ESurvivalRoundState NewState);
+	void TransitionToRoundState(const ESurvivalRoundState NewState);
 
 	FTimerHandle RoundStateTimerHandle;
 };

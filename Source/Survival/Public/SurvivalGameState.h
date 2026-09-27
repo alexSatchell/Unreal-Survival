@@ -19,10 +19,10 @@ public:
 private:
 	friend class ASurvivalGameMode;
 
-	void SetRoundState(ESurvivalRoundState NewState);
+	void SetRoundState(const ESurvivalRoundState NewState);
 
 	UFUNCTION()
-	void OnRep_RoundState(ESurvivalRoundState PreviousRoundState);
+	void OnRep_RoundState(const ESurvivalRoundState PreviousRoundState);
 
 	bool bHasInitializedRoundState = false;
 };
