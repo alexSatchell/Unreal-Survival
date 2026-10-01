@@ -1,4 +1,5 @@
 #include "SurvivalGameMode.h"
+#include "SurvivalCharacter.h"
 #include "SurvivalGameState.h"
 #include "SurvivalPlayerController.h"
 #include "SurvivalPlayerState.h"
@@ -7,6 +8,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogSurvivalGameMode, Log, All);
 
 ASurvivalGameMode::ASurvivalGameMode()
 {
+	DefaultPawnClass = ASurvivalCharacter::StaticClass();
 	GameStateClass = ASurvivalGameState::StaticClass();
 	PlayerControllerClass = ASurvivalPlayerController::StaticClass();
 	PlayerStateClass = ASurvivalPlayerState::StaticClass();
