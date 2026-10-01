@@ -23,7 +23,7 @@ private:
 	void SetRoundState(const ESurvivalRoundState NewState);
 
 	UFUNCTION()
-	void OnRep_RoundState(const ESurvivalRoundState PreviousRoundState);
+	void OnRep_RoundState(const ESurvivalRoundState PreviousRoundState) const;
 
 	bool bHasInitializedRoundState = false;
 };

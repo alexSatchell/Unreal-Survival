@@ -41,7 +41,7 @@ void ASurvivalGameState::SetRoundState(const ESurvivalRoundState NewState)
 	UE_LOG(LogSurvivalGameState, Log, TEXT("Server round state changed: %s -> %s"), *PreviousState, *NewStateName);
 }
 
-void ASurvivalGameState::OnRep_RoundState(const ESurvivalRoundState PreviousRoundState)
+void ASurvivalGameState::OnRep_RoundState(const ESurvivalRoundState PreviousRoundState) const
 {
 	const FString PreviousState = UE::Survival::Private::RoundStateToString(PreviousRoundState);
 	const FString CurrentState = UE::Survival::Private::RoundStateToString(RoundState);

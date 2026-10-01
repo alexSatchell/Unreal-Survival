@@ -8,6 +8,7 @@ void ASurvivalPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ASurvivalPlayerState, bIsAlive);
+	DOREPLIFETIME(ASurvivalPlayerState, bIsReady);
 }
 
 void ASurvivalPlayerState::AddPoint()
@@ -48,9 +49,40 @@ bool ASurvivalPlayerState::GetIsAlive() const
 	return bIsAlive;
 }
 
+void ASurvivalPlayerState::SetIsReady(const bool bNewIsReady)
+{
+	if (!HasAuthority())
+	{
+		UE_LOG(LogSurvivalPlayerState, Warning, TEXT("Rejected IsReady change because this PlayerState has no authority"));
+		return;
+	}
+
+	if (bIsReady == bNewIsReady)
+	{
+		return;
+	}
+
+	const bool bPreviousIsReady = bIsReady;
+	bIsReady = bNewIsReady;
+
+	UE_LOG(LogSurvivalPlayerState, Log, TEXT("Server changed IsReady for %s: %s -> %s"), *GetPlayerName(), bPreviousIsReady ? TEXT("true") : TEXT("false"), bIsReady ? TEXT("true") : TEXT("false"));
+}
+
+bool ASurvivalPlayerState::GetIsReady() const
+{
+	return bIsReady;
+}
+
 void ASurvivalPlayerState::OnRep_IsAlive(const bool bPreviousIsAlive) const
 {
 	const TCHAR* PreviousState = bPreviousIsAlive ? TEXT("true") : TEXT("false");
 	const TCHAR* CurrentState = bIsAlive ? TEXT("true") : TEXT("false");
 	UE_LOG(LogSurvivalPlayerState, Log, TEXT("Client received replicated IsAlive change for %s: %s -> %s"), *GetPlayerName(), PreviousState, CurrentState);
+}
+
+void ASurvivalPlayerState::OnRep_IsReady(const bool bPreviousIsReady) const
+{
+	const TCHAR* PreviousState = bPreviousIsReady ? TEXT("true") : TEXT("false");
+	const TCHAR* CurrentState = bIsReady ? TEXT("true") : TEXT("false");
+	UE_LOG(LogSurvivalPlayerState, Log, TEXT("Client received replicated IsReady change for %s: %s -> %s"), *GetPlayerName(), PreviousState, CurrentState);
 }
