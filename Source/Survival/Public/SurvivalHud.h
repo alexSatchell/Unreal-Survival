@@ -10,6 +10,9 @@ class SURVIVAL_API ASurvivalHud : public AHUD
 {
 	GENERATED_BODY()
 
+public:
+	void LogLocalPlayerState() const;
+
 protected:
 	virtual void BeginPlay() override;
 };
