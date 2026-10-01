@@ -7,6 +7,5 @@ void ASurvivalCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	const TCHAR* ControllerName = NewController ? *NewController->GetName() : TEXT("None");
-	UE_LOG(LogSurvivalCharacter, Log, TEXT("Character %s was possessed by controller %s"), *GetName(), ControllerName);
+	UE_LOG(LogSurvivalCharacter, Log, TEXT("Character %s was possessed by controller %s"), *GetName(), NewController ? *NewController->GetName() : TEXT("None"));
 }

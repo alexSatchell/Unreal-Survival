@@ -1,6 +1,7 @@
 #include "SurvivalGameMode.h"
 #include "SurvivalCharacter.h"
 #include "SurvivalGameState.h"
+#include "SurvivalHud.h"
 #include "SurvivalPlayerController.h"
 #include "SurvivalPlayerState.h"
 
@@ -10,6 +11,7 @@ ASurvivalGameMode::ASurvivalGameMode()
 {
 	DefaultPawnClass = ASurvivalCharacter::StaticClass();
 	GameStateClass = ASurvivalGameState::StaticClass();
+	HUDClass = ASurvivalHud::StaticClass();
 	PlayerControllerClass = ASurvivalPlayerController::StaticClass();
 	PlayerStateClass = ASurvivalPlayerState::StaticClass();
 }
