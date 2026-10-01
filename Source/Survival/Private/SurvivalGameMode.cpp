@@ -1,32 +1,27 @@
 #include "SurvivalGameMode.h"
 #include "SurvivalGameState.h"
+#include "SurvivalPlayerController.h"
+#include "SurvivalPlayerState.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalGameMode, Log, All);
 
 ASurvivalGameMode::ASurvivalGameMode()
 {
 	GameStateClass = ASurvivalGameState::StaticClass();
+	PlayerControllerClass = ASurvivalPlayerController::StaticClass();
+	PlayerStateClass = ASurvivalPlayerState::StaticClass();
 }
 
 void ASurvivalGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!HasAuthority())
-	{
-		return;
-	}
-
 	if (GetGameState<ASurvivalGameState>())
 	{
 		TransitionToRoundState(ESurvivalRoundState::Waiting);
 	}
-	else
-	{
-		UE_LOG(LogSurvivalGameMode, Error, TEXT("SurvivalGameState is unavailable; round state timers were not started"));
-		return;
-	}
 
+	// after 5 seconds set the match to inProgress state
 	GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::InProgress), 5.0f, false);
 }
 
@@ -36,14 +31,10 @@ void ASurvivalGameMode::TransitionToRoundState(const ESurvivalRoundState NewStat
 	{
 		SurvivalGameState->SetRoundState(NewState);
 	}
-	else
-	{
-		UE_LOG(LogSurvivalGameMode, Error, TEXT("SurvivalGameState is unavailable; round state transition was not applied"));
-		return;
-	}
 
 	if (NewState == ESurvivalRoundState::InProgress)
 	{
+		// if match is in progress, set the timer to transition to finished state after 60 seconds
 		GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::Finished), 60.0f, false);
 	}
 }

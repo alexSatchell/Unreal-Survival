@@ -17,6 +17,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
+	// friend class will let GameMode access private members of this class
 	friend class ASurvivalGameMode;
 
 	void SetRoundState(const ESurvivalRoundState NewState);
