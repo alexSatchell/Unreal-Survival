@@ -1,10 +1,12 @@
 #include "Door.h"
+#include "Components/SceneComponent.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDoor, Log, All);
 
 ADoor::ADoor()
 {
+	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 	bReplicates = true;
 }
 
