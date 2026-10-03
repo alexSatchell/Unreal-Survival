@@ -15,7 +15,11 @@ protected:
 
 private:
 	void HandleReadyInput();
+	void HandleInteractInput();
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetReady();
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract();
 };

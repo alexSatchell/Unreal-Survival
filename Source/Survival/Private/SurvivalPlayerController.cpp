@@ -1,4 +1,6 @@
 #include "SurvivalPlayerController.h"
+#include "Door.h"
+#include "EngineUtils.h"
 #include "InputCoreTypes.h"
 #include "SurvivalPlayerState.h"
 
@@ -11,6 +13,7 @@ void ASurvivalPlayerController::SetupInputComponent()
 	if (InputComponent)
 	{
 		InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ASurvivalPlayerController::HandleReadyInput);
+		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &ASurvivalPlayerController::HandleInteractInput);
 	}
 }
 
@@ -23,6 +26,38 @@ void ASurvivalPlayerController::HandleReadyInput()
 
 	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local player pressed R to become ready"));
 	ServerSetReady();
+}
+
+void ASurvivalPlayerController::HandleInteractInput()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local player pressed I to interact"));
+	ServerInteract();
+}
+
+void ASurvivalPlayerController::ServerInteract_Implementation()
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction because the world is unavailable"));
+		return;
+	}
+
+	for (TActorIterator<ADoor> DoorIterator(World); DoorIterator; ++DoorIterator)
+	{
+		if (ADoor* Door = *DoorIterator)
+		{
+			Door->SetIsOpen(!Door->bIsOpen);
+			return;
+		}
+	}
+
+	UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Interaction found no Door instance in the world"));
 }
 
 void ASurvivalPlayerController::ServerSetReady_Implementation()
