@@ -21,5 +21,5 @@ private:
 	void ServerSetReady();
 
 	UFUNCTION(Server, Reliable)
-	void ServerInteract();
+	void ServerInteract(AActor* TargetActor);
 };

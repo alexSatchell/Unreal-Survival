@@ -1,12 +1,17 @@
 #include "Door.h"
-#include "Components/SceneComponent.h"
+#include "GameFramework/Controller.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDoor, Log, All);
 
 ADoor::ADoor()
 {
-	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
+	CollisionComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionComponent"));
+	CollisionComponent->SetBoxExtent(FVector(50.0f));
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	RootComponent = CollisionComponent;
 	bReplicates = true;
 }
 
@@ -34,6 +39,12 @@ void ADoor::SetIsOpen(const bool bNewIsOpen)
 	bIsOpen = bNewIsOpen;
 
 	UE_LOG(LogDoor, Log, TEXT("Server changed IsOpen for %s: %s -> %s"), *GetName(), bPreviousIsOpen ? TEXT("true") : TEXT("false"), bIsOpen ? TEXT("true") : TEXT("false"));
+}
+
+void ADoor::Interact_Implementation(AController* InteractingController)
+{
+	UE_LOG(LogDoor, Log, TEXT("Door %s was interacted with by controller %s"), *GetName(), InteractingController ? *InteractingController->GetName() : TEXT("None"));
+	SetIsOpen(!bIsOpen);
 }
 
 void ADoor::OnRep_IsOpen(const bool bPreviousIsOpen) const

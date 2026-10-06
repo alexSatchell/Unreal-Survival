@@ -1,12 +1,23 @@
 #include "Pickup.h"
-#include "Components/SceneComponent.h"
+#include "Components/BoxComponent.h"
+#include "GameFramework/Controller.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPickup, Log, All);
 
 APickup::APickup()
 {
-	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
+	CollisionComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionComponent"));
+	CollisionComponent->SetBoxExtent(FVector(50.0f));
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	RootComponent = CollisionComponent;
+
+	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+	MeshComponent->SetupAttachment(RootComponent);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	bReplicates = true;
 }
 
@@ -34,6 +45,14 @@ bool APickup::TryPickup()
 	bIsAvailable = false;
 	UE_LOG(LogPickup, Log, TEXT("Server accepted pickup for %s and changed IsAvailable to false"), *GetName());
 	return true;
+}
+
+void APickup::Interact_Implementation(AController* InteractingController)
+{
+	if (TryPickup())
+	{
+		UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *GetName(), InteractingController ? *InteractingController->GetName() : TEXT("None"));
+	}
 }
 
 void APickup::OnRep_IsAvailable(const bool bPreviousIsAvailable) const
