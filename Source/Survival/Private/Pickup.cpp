@@ -1,7 +1,6 @@
 #include "Pickup.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/Controller.h"
-#include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPickup, Log, All);
 
@@ -21,42 +20,23 @@ APickup::APickup()
 	bReplicates = true;
 }
 
-void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(APickup, bIsAvailable);
-}
-
-bool APickup::TryPickup()
+void APickup::Interact_Implementation(AController* InteractingController)
 {
 	if (!HasAuthority())
 	{
-		UE_LOG(LogPickup, Warning, TEXT("Rejected pickup attempt for %s because this Pickup has no authority"), *GetName());
-		return false;
+		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because it has no authority"), *GetName());
+		return;
 	}
 
-	if (!bIsAvailable)
+	const FString PickupName = GetName();
+	UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *PickupName, InteractingController ? *InteractingController->GetName() : TEXT("None"));
+
+	if (Destroy())
 	{
-		UE_LOG(LogPickup, Log, TEXT("Rejected pickup attempt for %s because it is unavailable"), *GetName());
-		return false;
+		UE_LOG(LogPickup, Log, TEXT("Server destroyed consumed pickup %s"), *PickupName);
 	}
-
-	bIsAvailable = false;
-	UE_LOG(LogPickup, Log, TEXT("Server accepted pickup for %s and changed IsAvailable to false"), *GetName());
-	return true;
-}
-
-void APickup::Interact_Implementation(AController* InteractingController)
-{
-	if (TryPickup())
+	else
 	{
-		UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *GetName(), InteractingController ? *InteractingController->GetName() : TEXT("None"));
+		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
 	}
-}
-
-void APickup::OnRep_IsAvailable(const bool bPreviousIsAvailable) const
-{
-	UE_LOG(LogPickup, Log, TEXT("Client received replicated IsAvailable change for %s: %s -> %s"), *GetName(), bPreviousIsAvailable ? TEXT("true") : TEXT("false"),
-		bIsAvailable ? TEXT("true") : TEXT("false"));
 }

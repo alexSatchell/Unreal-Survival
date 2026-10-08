@@ -28,7 +28,6 @@ void ASurvivalHud::LogLocalPlayerState() const
 		return;
 	}
 
-	const TCHAR* ReadyState = SurvivalPlayerState->GetIsReady() ? TEXT("true") : TEXT("false");
 	const TCHAR* AliveState = SurvivalPlayerState->GetIsAlive() ? TEXT("true") : TEXT("false");
-	UE_LOG(LogSurvivalHud, Log, TEXT("Local PlayerState: PlayerName=%s Score=%.0f IsReady=%s IsAlive=%s"), *SurvivalPlayerState->GetPlayerName(), SurvivalPlayerState->GetScore(), ReadyState, AliveState);
+	UE_LOG(LogSurvivalHud, Log, TEXT("Local PlayerState: PlayerName=%s Score=%.0f IsAlive=%s"), *SurvivalPlayerState->GetPlayerName(), SurvivalPlayerState->GetScore(), AliveState);
 }
