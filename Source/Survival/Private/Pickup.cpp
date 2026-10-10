@@ -16,6 +16,7 @@ APickup::APickup()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	MeshComponent->SetupAttachment(RootComponent);
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DisplayName = NSLOCTEXT("Survival", "DefaultPickupDisplayName", "Item");
 
 	bReplicates = true;
 }
@@ -39,4 +40,15 @@ void APickup::Interact_Implementation(AController* InteractingController)
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
 	}
+}
+
+FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
+{
+	FInteractionPromptData PromptData;
+	PromptData.Style = EInteractionPromptStyle::Pickup;
+	PromptData.State = EInteractionPromptState::Available;
+	PromptData.ActionText = NSLOCTEXT("Survival", "PickupAction", "Pick up");
+	PromptData.TargetText = DisplayName.IsEmpty() ? FText::FromString(GetName()) : DisplayName;
+	PromptData.WorldOffset = PromptWorldOffset;
+	return PromptData;
 }

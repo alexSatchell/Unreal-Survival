@@ -7,6 +7,8 @@
 #include "InputActionValue.h"
 #include "SurvivalCharacter.generated.h"
 
+class USurvivalInventoryComponent;
+
 UCLASS()
 class SURVIVAL_API ASurvivalCharacter : public ACharacter
 {
@@ -17,6 +19,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> CameraComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+	TObjectPtr<USurvivalInventoryComponent> InventoryComponent;
 
 	virtual void PossessedBy(AController* NewController) override;
 

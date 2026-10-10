@@ -4,6 +4,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "InteractionPromptActor.h"
+#include "InteractionPromptWidget.h"
 #include "InputCoreTypes.h"
 #include "Interfaces/Interactable.h"
 #include "SurvivalPlayerState.h"
@@ -18,6 +20,9 @@ void ASurvivalPlayerController::BeginPlay()
 	{
 		return;
 	}
+
+	GetWorldTimerManager().SetTimer(FocusTraceTimerHandle, this, &ASurvivalPlayerController::UpdateInteractionFocus, FMath::Max(FocusTraceInterval, 0.01f), true, 0.0f);
+	CreateInteractionPromptActor();
 
 	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
 	if (!LocalPlayer)
@@ -36,6 +41,16 @@ void ASurvivalPlayerController::BeginPlay()
 	{
 		InputSubsystem->AddMappingContext(PlayerMappingContext, 0);
 	}
+}
+
+void ASurvivalPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearTimer(FocusTraceTimerHandle);
+	if (IsValid(InteractionPromptActor))
+	{
+		InteractionPromptActor->Destroy();
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void ASurvivalPlayerController::SetupInputComponent()
@@ -83,6 +98,82 @@ void ASurvivalPlayerController::HandleInteractInput()
 
 	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace found interactable actor %s"), *TargetActor->GetName());
 	ServerInteract(TargetActor);
+}
+
+void ASurvivalPlayerController::CreateInteractionPromptActor()
+{
+	if (!InteractionPromptWidgetClass)
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Interaction prompt widget class is not configured for %s"), *GetName());
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	InteractionPromptActor = World->SpawnActor<AInteractionPromptActor>(AInteractionPromptActor::StaticClass(), FTransform::Identity, SpawnParameters);
+	if (InteractionPromptActor)
+	{
+		InteractionPromptActor->SetPromptWidgetClass(InteractionPromptWidgetClass);
+		InteractionPromptActor->SetPromptWorldScale(InteractionPromptWorldScale);
+	}
+}
+
+void ASurvivalPlayerController::UpdateInteractionFocus()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	FVector ViewLocation;
+	FHitResult HitResult;
+	AActor* TargetActor = nullptr;
+	if (TraceInteraction(HitResult, ViewLocation, FName(TEXT("InteractionFocusTrace"))))
+	{
+		TargetActor = HitResult.GetActor();
+		if (!IsValidInteractionTarget(TargetActor))
+		{
+			TargetActor = nullptr;
+		}
+	}
+
+	AActor* PreviousTargetActor = FocusedInteractable.Get();
+	if (PreviousTargetActor != TargetActor)
+	{
+		if (TargetActor)
+		{
+			UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local interaction focus changed to %s"), *TargetActor->GetName());
+		}
+		else if (IsValid(PreviousTargetActor))
+		{
+			UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local interaction focus cleared from %s"), *PreviousTargetActor->GetName());
+		}
+	}
+
+	FocusedInteractable = TargetActor;
+	FocusedInteractionPrompt = TargetActor ? IInteractable::Execute_GetInteractionPrompt(TargetActor, this) : FInteractionPromptData();
+	if (InteractionPromptActor)
+	{
+		if (TargetActor)
+		{
+			FVector BoundsOrigin;
+			FVector BoundsExtent;
+			TargetActor->GetActorBounds(false, BoundsOrigin, BoundsExtent);
+			const FVector PromptLocation = BoundsOrigin + FocusedInteractionPrompt.WorldOffset;
+			InteractionPromptActor->ShowPrompt(PromptLocation, ViewLocation, FocusedInteractionPrompt);
+		}
+		else
+		{
+			InteractionPromptActor->HidePrompt();
+		}
+	}
 }
 
 void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActor)

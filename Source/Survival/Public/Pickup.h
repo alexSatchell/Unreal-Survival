@@ -22,5 +22,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pickup")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pickup")
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	FVector PromptWorldOffset = FVector(0.0f, 0.0f, 50.0f);
+
 	virtual void Interact_Implementation(AController* InteractingController) override;
+	virtual FInteractionPromptData GetInteractionPrompt_Implementation(AController* InteractingController) const override;
 };
