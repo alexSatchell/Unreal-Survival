@@ -1,6 +1,9 @@
 #include "Pickup.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/Controller.h"
+#include "SurvivalItemDefinition.h"
+#include "SurvivalCharacter.h"
+#include "SurvivalInventoryComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPickup, Log, All);
 
@@ -29,6 +32,25 @@ void APickup::Interact_Implementation(AController* InteractingController)
 		return;
 	}
 
+	if (!IsValid(ItemDefinition))
+	{
+		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because no item definition is assigned"), *GetName());
+		return;
+	}
+
+	ASurvivalCharacter* Character = InteractingController ? Cast<ASurvivalCharacter>(InteractingController->GetPawn()) : nullptr;
+	if (!Character || !Character->InventoryComponent)
+	{
+		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because the interacting character has no inventory"), *GetName());
+		return;
+	}
+
+	if (!Character->InventoryComponent->TryAddItem(ItemDefinition, Quantity))
+	{
+		UE_LOG(LogPickup, Log, TEXT("Inventory rejected pickup %s"), *GetName());
+		return;
+	}
+
 	const FString PickupName = GetName();
 	UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *PickupName, InteractingController ? *InteractingController->GetName() : TEXT("None"));
 
@@ -48,7 +70,8 @@ FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*
 	PromptData.Style = EInteractionPromptStyle::Pickup;
 	PromptData.State = EInteractionPromptState::Available;
 	PromptData.ActionText = NSLOCTEXT("Survival", "PickupAction", "Pick up");
-	PromptData.TargetText = DisplayName.IsEmpty() ? FText::FromString(GetName()) : DisplayName;
+	const FText& ItemDisplayName = ItemDefinition && !ItemDefinition->DisplayName.IsEmpty() ? ItemDefinition->DisplayName : DisplayName;
+	PromptData.TargetText = ItemDisplayName.IsEmpty() ? FText::FromString(GetName()) : ItemDisplayName;
 	PromptData.WorldOffset = PromptWorldOffset;
 	return PromptData;
 }
