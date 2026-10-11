@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "Interfaces/Interactable.h"
+#include "SurvivalItemTypes.h"
 #include "Pickup.generated.h"
 
 class USurvivalItemDefinition;
@@ -25,17 +26,39 @@ public:
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pickup")
-	FText DisplayName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pickup")
 	TObjectPtr<USurvivalItemDefinition> ItemDefinition;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pickup", meta = (ClampMin = "1", UIMin = "1"))
-	int32 Quantity = 1;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Pickup")
+	FGuid ItemInstanceId;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ItemDefinitionId, BlueprintReadOnly, Category = "Pickup")
+	FPrimaryAssetId ItemDefinitionId;
+
+	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	FText ReplicatedDisplayName;
+
+	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	TObjectPtr<UStaticMesh> ReplicatedPickupMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	FVector PromptWorldOffset = FVector(0.0f, 0.0f, 50.0f);
 
 	virtual void Interact_Implementation(AController* InteractingController) override;
 	virtual FInteractionPromptData GetInteractionPrompt_Implementation(AController* InteractingController) const override;
+	bool InitializeItemInstance(const FSurvivalItemInstance& InItemInstance, USurvivalItemDefinition* InItemDefinition);
+
+protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+
+private:
+	UFUNCTION()
+	void OnRep_ItemDefinitionId();
+
+	UFUNCTION()
+	void OnRep_PickupPresentation();
+
+	USurvivalItemDefinition* ResolveItemDefinition() const;
+	void ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition);
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

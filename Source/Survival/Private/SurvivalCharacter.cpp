@@ -24,6 +24,11 @@ ASurvivalCharacter::ASurvivalCharacter()
 	InventoryComponent = CreateDefaultSubobject<USurvivalInventoryComponent>(TEXT("InventoryComponent"));
 }
 
+USurvivalInventoryComponent* ASurvivalCharacter::GetInventoryComponent() const
+{
+	return FindComponentByClass<USurvivalInventoryComponent>();
+}
+
 void ASurvivalCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);

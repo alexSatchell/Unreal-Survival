@@ -2,21 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "SurvivalItemTypes.h"
 #include "SurvivalInventoryComponent.generated.h"
 
 class USurvivalItemDefinition;
-
-USTRUCT(BlueprintType)
-struct SURVIVAL_API FSurvivalInventoryEntry
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
-	TObjectPtr<USurvivalItemDefinition> ItemDefinition;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
-	int32 Quantity = 0;
-};
 
 /** Owns a character's server-authoritative carried-item state and replicates it to the owning client. */
 UCLASS(ClassGroup = (Survival), meta = (BlueprintSpawnableComponent))
@@ -27,16 +16,20 @@ class SURVIVAL_API USurvivalInventoryComponent : public UActorComponent
 public:
 	USurvivalInventoryComponent();
 
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	bool TryAddItem(USurvivalItemDefinition* InItemDefinition, int32 InQuantity = 1);
+	bool TryAddItem(const FSurvivalItemInstance& InItemInstance, USurvivalItemDefinition* InItemDefinition);
+	bool FindItemByInstanceId(const FGuid& InInstanceId, FSurvivalItemInstance& OutItemInstance) const;
+	USurvivalItemDefinition* FindItemDefinitionByInstanceId(const FGuid& InInstanceId) const;
+	bool TryRemoveItem(const FGuid& InInstanceId, FSurvivalItemInstance& OutRemovedItem);
 
-	UPROPERTY(ReplicatedUsing = OnRep_InventoryEntries, BlueprintReadOnly, Category = "Inventory")
-	TArray<FSurvivalInventoryEntry> InventoryEntries;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Inventory")
+	TArray<FSurvivalItemInstance> Items;
 
-protected:
-	UFUNCTION()
-	void OnRep_InventoryEntries();
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Inventory")
+	float CurrentWeight = 0.0f;
 
 private:
+	UPROPERTY(Transient)
+	TMap<FGuid, TObjectPtr<USurvivalItemDefinition>> ServerItemDefinitions;
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

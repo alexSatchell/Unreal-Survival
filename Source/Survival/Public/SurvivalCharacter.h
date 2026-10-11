@@ -24,6 +24,7 @@ public:
 	TObjectPtr<USurvivalInventoryComponent> InventoryComponent;
 
 	virtual void PossessedBy(AController* NewController) override;
+	USurvivalInventoryComponent* GetInventoryComponent() const;
 
 protected:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
