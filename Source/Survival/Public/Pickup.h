@@ -10,7 +10,7 @@
 
 class USurvivalItemDefinition;
 
-/** Represents a collectible world item that is permanently destroyed after a successful interaction. */
+/** Represents a collectible world item permanently destroyed after a successful interaction. */
 UCLASS()
 class SURVIVAL_API APickup : public AActor, public IInteractable
 {
@@ -58,7 +58,7 @@ private:
 	UFUNCTION()
 	void OnRep_PickupPresentation();
 
-	USurvivalItemDefinition* ResolveItemDefinition() const;
+	USurvivalItemDefinition* GetItemDefinition() const;
 	void ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition);
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

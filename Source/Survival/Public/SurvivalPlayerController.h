@@ -26,6 +26,7 @@ protected:
 
 private:
 	void HandleInteractInput();
+	void HandleUseItemInput();
 	void HandleDropInput();
 	void CreateInteractionPromptActor();
 	void UpdateInteractionFocus();
@@ -40,6 +41,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> DropAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> UseItemAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Interaction", meta = (ClampMin = "0.0"))
 	float InteractionDistance = 1000.0f;
@@ -64,4 +68,7 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerDropItem(FGuid ItemInstanceId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUseItem(FGuid ItemInstanceId);
 };

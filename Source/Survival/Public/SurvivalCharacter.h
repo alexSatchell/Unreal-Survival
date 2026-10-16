@@ -8,6 +8,7 @@
 #include "SurvivalCharacter.generated.h"
 
 class USurvivalInventoryComponent;
+class USurvivalVitalComponent;
 
 UCLASS()
 class SURVIVAL_API ASurvivalCharacter : public ACharacter
@@ -23,8 +24,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<USurvivalInventoryComponent> InventoryComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Vitals")
+	TObjectPtr<USurvivalVitalComponent> VitalComponent;
+
 	virtual void PossessedBy(AController* NewController) override;
 	USurvivalInventoryComponent* GetInventoryComponent() const;
+	USurvivalVitalComponent* GetVitalComponent() const;
 
 protected:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

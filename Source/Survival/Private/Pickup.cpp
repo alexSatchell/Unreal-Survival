@@ -56,10 +56,10 @@ void APickup::BeginPlay()
 		ItemInstanceId = FGuid::NewGuid();
 	}
 
-	ApplyItemPresentation(ResolveItemDefinition());
+	ApplyItemPresentation(GetItemDefinition());
 }
 
-USurvivalItemDefinition* APickup::ResolveItemDefinition() const
+USurvivalItemDefinition* APickup::GetItemDefinition() const
 {
 	if (IsValid(ItemDefinition))
 	{
@@ -112,16 +112,16 @@ void APickup::Interact_Implementation(AController* InteractingController)
 		return;
 	}
 
-	USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
-	if (!IsValid(ResolvedItemDefinition))
+	USurvivalItemDefinition* PickupItemDefinition = GetItemDefinition();
+	if (!IsValid(PickupItemDefinition))
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because no item definition is assigned"), *GetName());
 		return;
 	}
 
-	ASurvivalCharacter* Character = InteractingController ? Cast<ASurvivalCharacter>(InteractingController->GetPawn()) : nullptr;
-	USurvivalInventoryComponent* CharacterInventory = Character ? Character->GetInventoryComponent() : nullptr;
-	if (!Character || !CharacterInventory)
+	const ASurvivalCharacter* SurvivalCharacter = InteractingController ? Cast<ASurvivalCharacter>(InteractingController->GetPawn()) : nullptr;
+	USurvivalInventoryComponent* SurvivalInventoryComponent = SurvivalCharacter ? SurvivalCharacter->GetInventoryComponent() : nullptr;
+	if (!SurvivalCharacter || !SurvivalInventoryComponent)
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because the interacting character has no inventory"), *GetName());
 		return;
@@ -129,7 +129,7 @@ void APickup::Interact_Implementation(AController* InteractingController)
 	FSurvivalItemInstance ItemInstance;
 	ItemInstance.InstanceId = ItemInstanceId;
 	ItemInstance.ItemDefinitionId = ItemDefinitionId;
-	if (!CharacterInventory->TryAddItem(ItemInstance, ResolvedItemDefinition))
+	if (!SurvivalInventoryComponent->TryAddItem(ItemInstance, PickupItemDefinition))
 	{
 		UE_LOG(LogPickup, Log, TEXT("Inventory rejected pickup %s"), *GetName());
 		return;
@@ -154,10 +154,10 @@ FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*
 	PromptData.Style = EInteractionPromptStyle::Pickup;
 	PromptData.State = EInteractionPromptState::Available;
 	PromptData.ActionText = NSLOCTEXT("Survival", "PickupAction", "Pick up");
-	const USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
-	if (ResolvedItemDefinition && !ResolvedItemDefinition->DisplayName.IsEmpty())
+	const USurvivalItemDefinition* PickupItemDefinition = GetItemDefinition();
+	if (PickupItemDefinition && !PickupItemDefinition->DisplayName.IsEmpty())
 	{
-		PromptData.TargetText = ResolvedItemDefinition->DisplayName;
+		PromptData.TargetText = PickupItemDefinition->DisplayName;
 	}
 	else
 	{

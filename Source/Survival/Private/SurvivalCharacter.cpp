@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Math/RotationMatrix.h"
 #include "SurvivalInventoryComponent.h"
+#include "SurvivalVitalComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalCharacter, Log, All);
 
@@ -22,11 +23,17 @@ ASurvivalCharacter::ASurvivalCharacter()
 	CameraComponent->bUsePawnControlRotation = true;
 
 	InventoryComponent = CreateDefaultSubobject<USurvivalInventoryComponent>(TEXT("InventoryComponent"));
+	VitalComponent = CreateDefaultSubobject<USurvivalVitalComponent>(TEXT("VitalComponent"));
 }
 
 USurvivalInventoryComponent* ASurvivalCharacter::GetInventoryComponent() const
 {
 	return FindComponentByClass<USurvivalInventoryComponent>();
+}
+
+USurvivalVitalComponent* ASurvivalCharacter::GetVitalComponent() const
+{
+	return FindComponentByClass<USurvivalVitalComponent>();
 }
 
 void ASurvivalCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

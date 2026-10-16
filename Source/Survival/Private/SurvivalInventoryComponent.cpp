@@ -23,9 +23,10 @@ bool USurvivalInventoryComponent::TryAddItem(const FSurvivalItemInstance& InItem
 	}
 
 	Items.Add(InItemInstance);
+	// why do we do this?
 	ServerItemDefinitions.Add(InItemInstance.InstanceId, InItemDefinition);
 	CurrentWeight += InItemDefinition->Weight;
-
+	
 	const FString ItemName = InItemDefinition->DisplayName.IsEmpty() ? InItemDefinition->GetName() : InItemDefinition->DisplayName.ToString();
 	UE_LOG(LogSurvivalInventory, Log, TEXT("Added %s to inventory of %s (%d items, %.2f weight)"), *ItemName, *GetOwner()->GetName(), Items.Num(), CurrentWeight);
 	return true;

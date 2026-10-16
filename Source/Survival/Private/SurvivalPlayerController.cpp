@@ -13,6 +13,7 @@
 #include "SurvivalInventoryComponent.h"
 #include "SurvivalItemDefinition.h"
 #include "SurvivalPlayerState.h"
+#include "SurvivalVitalComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalPlayerController, Log, All);
 
@@ -80,10 +81,41 @@ void ASurvivalPlayerController::SetupInputComponent()
 		{
 			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input DropAction is not configured for %s"), *GetName());
 		}
+
+		if (UseItemAction)
+		{
+			EnhancedInputComponent->BindAction(UseItemAction, ETriggerEvent::Started, this, &ASurvivalPlayerController::HandleUseItemInput);
+		}
+		else
+		{
+			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input UseItemAction is not configured for %s"), *GetName());
+		}
 	}
 	else
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input component is unavailable for %s"), *GetName());
+	}
+}
+
+void ASurvivalPlayerController::HandleUseItemInput()
+{
+	if (!IsLocalController() || !GetPawn())
+	{
+		return;
+	}
+
+	const ASurvivalCharacter* SurvivalCharacter = Cast<ASurvivalCharacter>(GetPawn());
+	const USurvivalInventoryComponent* SurvivalInventoryComponent = SurvivalCharacter ? SurvivalCharacter->GetInventoryComponent() : nullptr;
+	if (!SurvivalInventoryComponent || SurvivalInventoryComponent->Items.IsEmpty())
+	{
+		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Use input ignored because the inventory is empty"));
+		return;
+	}
+
+	const FSurvivalItemInstance& FirstSurvivalItemInstance = SurvivalInventoryComponent->Items[0];
+	if (FirstSurvivalItemInstance.IsValid())
+	{
+		ServerUseItem(FirstSurvivalItemInstance.InstanceId);
 	}
 }
 
@@ -121,28 +153,28 @@ void ASurvivalPlayerController::HandleDropInput()
 		return;
 	}
 
-	ASurvivalCharacter* ControlledCharacter = Cast<ASurvivalCharacter>(GetPawn());
-	USurvivalInventoryComponent* InventoryComponent = ControlledCharacter ? ControlledCharacter->GetInventoryComponent() : nullptr;
-	if (!InventoryComponent)
+	ASurvivalCharacter* SurvivalCharacter = Cast<ASurvivalCharacter>(GetPawn());
+	USurvivalInventoryComponent* SurvivalInventoryComponent = SurvivalCharacter ? SurvivalCharacter->GetInventoryComponent() : nullptr;
+	if (!SurvivalInventoryComponent)
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Drop input rejected because the controlled character has no inventory component"));
 		return;
 	}
 
-	if (InventoryComponent->Items.IsEmpty())
+	if (SurvivalInventoryComponent->Items.IsEmpty())
 	{
 		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Drop input ignored because the replicated inventory is empty"));
 		return;
 	}
 
-	const FSurvivalItemInstance& FirstItem = InventoryComponent->Items[0];
-	if (!FirstItem.IsValid())
+	const FSurvivalItemInstance& FirstSurvivalItemInstance = SurvivalInventoryComponent->Items[0];
+	if (!FirstSurvivalItemInstance.IsValid())
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Drop input rejected because the first inventory item is invalid"));
 		return;
 	}
 
-	ServerDropItem(FirstItem.InstanceId);
+	ServerDropItem(FirstSurvivalItemInstance.InstanceId);
 }
 
 void ASurvivalPlayerController::CreateInteractionPromptActor()
@@ -266,23 +298,23 @@ void ASurvivalPlayerController::ServerDropItem_Implementation(FGuid ItemInstance
 		return;
 	}
 
-	ASurvivalCharacter* ControlledCharacter = Cast<ASurvivalCharacter>(GetPawn());
-	USurvivalInventoryComponent* InventoryComponent = ControlledCharacter ? ControlledCharacter->GetInventoryComponent() : nullptr;
-	if (!ControlledCharacter || !InventoryComponent)
+	ASurvivalCharacter* SurvivalCharacter = Cast<ASurvivalCharacter>(GetPawn());
+	USurvivalInventoryComponent* SurvivalInventoryComponent = SurvivalCharacter ? SurvivalCharacter->GetInventoryComponent() : nullptr;
+	if (!SurvivalCharacter || !SurvivalInventoryComponent)
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop request for %s"), *GetName());
 		return;
 	}
 
-	FSurvivalItemInstance ItemInstance;
-	if (!InventoryComponent->FindItemByInstanceId(ItemInstanceId, ItemInstance))
+	FSurvivalItemInstance SurvivalItemInstance;
+	if (!SurvivalInventoryComponent->FindItemByInstanceId(ItemInstanceId, SurvivalItemInstance))
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because item instance %s is not in the inventory"), *ItemInstanceId.ToString());
 		return;
 	}
 
-	USurvivalItemDefinition* ResolvedItemDefinition = InventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
-	if (!IsValid(ResolvedItemDefinition))
+	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
+	if (!IsValid(SurvivalItemDefinition))
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the server definition for item instance %s is missing"), *ItemInstanceId.ToString());
 		return;
@@ -294,34 +326,83 @@ void ASurvivalPlayerController::ServerDropItem_Implementation(FGuid ItemInstance
 		return;
 	}
 
-	const FVector DropLocation = ControlledCharacter->GetActorLocation() + ControlledCharacter->GetActorForwardVector() * 100.0f;
-	FSurvivalItemInstance RemovedItem;
-	if (!InventoryComponent->TryRemoveItem(ItemInstanceId, RemovedItem))
+	const FVector DropLocation = SurvivalCharacter->GetActorLocation() + SurvivalCharacter->GetActorForwardVector() * 100.0f;
+	FSurvivalItemInstance RemovedSurvivalItemInstance;
+	if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RemovedSurvivalItemInstance))
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the inventory no longer contained the requested item for %s"), *GetName());
 		return;
 	}
 
-	const FTransform DropTransform(ControlledCharacter->GetActorRotation(), DropLocation);
-	APickup* DroppedPickup = World->SpawnActorDeferred<APickup>(APickup::StaticClass(), DropTransform, this, ControlledCharacter, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	const FTransform DropTransform(SurvivalCharacter->GetActorRotation(), DropLocation);
+	APickup* DroppedPickup = World->SpawnActorDeferred<APickup>(APickup::StaticClass(), DropTransform, this, SurvivalCharacter, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!DroppedPickup)
 	{
-		InventoryComponent->TryAddItem(RemovedItem, ResolvedItemDefinition);
+		SurvivalInventoryComponent->TryAddItem(RemovedSurvivalItemInstance, SurvivalItemDefinition);
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the pickup could not spawn for %s"), *GetName());
 		return;
 	}
 
-	if (!DroppedPickup->InitializeItemInstance(RemovedItem, ResolvedItemDefinition))
+	if (!DroppedPickup->InitializeItemInstance(RemovedSurvivalItemInstance, SurvivalItemDefinition))
 	{
 		DroppedPickup->Destroy();
-		InventoryComponent->TryAddItem(RemovedItem, ResolvedItemDefinition);
+		SurvivalInventoryComponent->TryAddItem(RemovedSurvivalItemInstance, SurvivalItemDefinition);
 		UE_LOG(LogSurvivalPlayerController, Error, TEXT("Rejected drop because the spawned pickup could not be initialized"));
 		return;
 	}
 
 	DroppedPickup->FinishSpawning(DropTransform);
 	DroppedPickup->ForceNetUpdate();
-	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Dropped item instance %s (%s) from %s"), *ItemInstanceId.ToString(), *ResolvedItemDefinition->GetName(), *GetName());
+	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Dropped item instance %s (%s) from %s"), *ItemInstanceId.ToString(), *SurvivalItemDefinition->GetName(), *GetName());
+}
+
+void ASurvivalPlayerController::ServerUseItem_Implementation(FGuid ItemInstanceId)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ASurvivalCharacter* SurvivalCharacter = Cast<ASurvivalCharacter>(GetPawn());
+	USurvivalInventoryComponent* SurvivalInventoryComponent = SurvivalCharacter ? SurvivalCharacter->GetInventoryComponent() : nullptr;
+	USurvivalVitalComponent* SurvivalVitalComponent = SurvivalCharacter ? SurvivalCharacter->GetVitalComponent() : nullptr;
+	if (!SurvivalCharacter || !SurvivalInventoryComponent || !SurvivalVitalComponent || !ItemInstanceId.IsValid())
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected use request for %s because the character, inventory, vital component, or item instance is invalid"), *GetName());
+		return;
+	}
+
+	FSurvivalItemInstance SurvivalItemInstance;
+	if (!SurvivalInventoryComponent->FindItemByInstanceId(ItemInstanceId, SurvivalItemInstance))
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected use because item instance %s is not in the inventory"), *ItemInstanceId.ToString());
+		return;
+	}
+
+	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
+	if (!IsValid(SurvivalItemDefinition) || SurvivalItemDefinition->HydrationRestoration <= 0.0f)
+	{
+		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Rejected use because item instance %s is not a hydrating consumable"), *ItemInstanceId.ToString());
+		return;
+	}
+
+	const float HydrationRestoration = SurvivalItemDefinition->HydrationRestoration;
+	const float PreviousHydration = SurvivalVitalComponent->CurrentHydration;
+	if (!SurvivalVitalComponent->TryRestoreHydration(HydrationRestoration))
+	{
+		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Rejected use of %s because hydration is already full"), *SurvivalItemDefinition->GetName());
+		return;
+	}
+
+	FSurvivalItemInstance RemovedSurvivalItemInstance;
+	if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RemovedSurvivalItemInstance))
+	{
+		SurvivalVitalComponent->SetCurrentHydration(PreviousHydration);
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Use of %s applied hydration but could not remove item instance %s"), *SurvivalItemDefinition->GetName(), *ItemInstanceId.ToString());
+		return;
+	}
+
+	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Used %s; hydration restored by %.1f for %s"), *SurvivalItemDefinition->GetName(), HydrationRestoration, *GetName());
 }
 
 bool ASurvivalPlayerController::IsValidInteractionTarget(const AActor* TargetActor) const
