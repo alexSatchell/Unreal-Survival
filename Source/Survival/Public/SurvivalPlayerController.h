@@ -7,8 +7,6 @@
 #include "InputMappingContext.h"
 #include "SurvivalPlayerController.generated.h"
 
-class USurvivalItemDefinition;
-
 /** Controls a player's interaction with a Survival match. */
 UCLASS()
 class SURVIVAL_API ASurvivalPlayerController : public APlayerController
@@ -26,8 +24,6 @@ protected:
 
 private:
 	void HandleInteractInput();
-	void HandleUseItemInput();
-	void HandleDropInput();
 	void CreateInteractionPromptActor();
 	void UpdateInteractionFocus();
 	bool IsValidInteractionTarget(const AActor* TargetActor) const;
@@ -38,12 +34,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> InteractAction;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	TObjectPtr<UInputAction> DropAction;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	TObjectPtr<UInputAction> UseItemAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Interaction", meta = (ClampMin = "0.0"))
 	float InteractionDistance = 1000.0f;
@@ -65,10 +55,4 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* TargetActor);
-
-	UFUNCTION(Server, Reliable)
-	void ServerDropItem(FGuid ItemInstanceId);
-
-	UFUNCTION(Server, Reliable)
-	void ServerUseItem(FGuid ItemInstanceId);
 };

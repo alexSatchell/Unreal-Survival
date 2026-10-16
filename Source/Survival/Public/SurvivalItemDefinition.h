@@ -7,7 +7,7 @@
 
 class UStaticMesh;
 
-/** Defines static data shared by every instance of an item type; inventories store instance identity while the server resolves this definition for weight, presentation, and use effects. */
+/** Defines static data shared by every instance of an item type; inventories store instance identity while the server resolves this definition for weight and presentation. */
 UCLASS(BlueprintType)
 class SURVIVAL_API USurvivalItemDefinition : public UPrimaryDataAsset
 {
@@ -24,7 +24,4 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World")
 	TObjectPtr<UStaticMesh> PickupMesh;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Consumable", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float HydrationRestoration = 25.0f;
 };

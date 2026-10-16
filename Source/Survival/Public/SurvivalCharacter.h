@@ -37,10 +37,24 @@ protected:
 private:
 	void HandleMove(const FInputActionValue& InputActionValue);
 	void HandleLook(const FInputActionValue& InputActionValue);
+	void HandleUseItemInput();
+	void HandleDropInput();
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> MoveAction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> DropAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> UseItemAction;
+
+	UFUNCTION(Server, Reliable)
+	void ServerDropItem(FGuid ItemInstanceId);
+
+	UFUNCTION(Server, Reliable)
+	void ServerUseItem(FGuid ItemInstanceId);
 };
