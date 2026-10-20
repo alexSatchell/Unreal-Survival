@@ -8,6 +8,7 @@
 #include "SurvivalCharacter.generated.h"
 
 class USurvivalInventoryComponent;
+class USurvivalConsumableItemDefinition;
 class USurvivalVitalComponent;
 
 UCLASS()
@@ -28,8 +29,16 @@ public:
 	TObjectPtr<USurvivalVitalComponent> VitalComponent;
 
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void Jump() override;
 	USurvivalInventoryComponent* GetInventoryComponent() const;
 	USurvivalVitalComponent* GetVitalComponent() const;
+	bool TryApplyConsumableEffects(const USurvivalConsumableItemDefinition* ConsumableItemDefinition);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void RequestUseItem(const FGuid& ItemInstanceId);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void RequestDropItem(const FGuid& ItemInstanceId);
 
 protected:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

@@ -1,5 +1,7 @@
 #include "SurvivalCharacter.h"
+#include "CollisionQueryParams.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -127,7 +129,39 @@ void ASurvivalCharacter::HandleUseItemInput()
 	const FSurvivalItemInstance& FirstSurvivalItemInstance = SurvivalInventoryComponent->Items[0];
 	if (FirstSurvivalItemInstance.IsValid())
 	{
-		ServerUseItem(FirstSurvivalItemInstance.InstanceId);
+		RequestUseItem(FirstSurvivalItemInstance.InstanceId);
+	}
+}
+
+bool ASurvivalCharacter::TryApplyConsumableEffects(const USurvivalConsumableItemDefinition* ConsumableItemDefinition)
+{
+	if (!HasAuthority() || !ConsumableItemDefinition || !VitalComponent)
+	{
+		return false;
+	}
+
+	bool bAppliedEffect = false;
+	bAppliedEffect |= VitalComponent->TryRestoreHydration(ConsumableItemDefinition->HydrationRestoration);
+	bAppliedEffect |= VitalComponent->TryRestoreHunger(ConsumableItemDefinition->HungerRestoration);
+	bAppliedEffect |= VitalComponent->TryApplyHealthDelta(ConsumableItemDefinition->HealthEffect);
+	bAppliedEffect |= VitalComponent->TryApplyIllness(ConsumableItemDefinition->SicknessTag, ConsumableItemDefinition->SicknessSeverity, ConsumableItemDefinition->SicknessDurationGameSeconds);
+	bAppliedEffect |= VitalComponent->TryCureIllnesses(ConsumableItemDefinition->SicknessCureTags);
+	return bAppliedEffect;
+}
+
+void ASurvivalCharacter::RequestUseItem(const FGuid& ItemInstanceId)
+{
+	if (IsLocallyControlled() && ItemInstanceId.IsValid())
+	{
+		ServerUseItem(ItemInstanceId);
+	}
+}
+
+void ASurvivalCharacter::RequestDropItem(const FGuid& ItemInstanceId)
+{
+	if (IsLocallyControlled() && ItemInstanceId.IsValid())
+	{
+		ServerDropItem(ItemInstanceId);
 	}
 }
 
@@ -153,7 +187,7 @@ void ASurvivalCharacter::HandleDropInput()
 		return;
 	}
 
-	ServerDropItem(FirstSurvivalItemInstance.InstanceId);
+	RequestDropItem(FirstSurvivalItemInstance.InstanceId);
 }
 
 void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
@@ -183,7 +217,7 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 		return;
 	}
 
-	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
+	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindDefinitionAssetByInstanceId(ItemInstanceId);
 	if (!IsValid(SurvivalItemDefinition))
 	{
 		UE_LOG(LogSurvivalCharacter, Warning, TEXT("Rejected drop because the server definition for item instance %s is missing"), *ItemInstanceId.ToString());
@@ -196,7 +230,31 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 		return;
 	}
 
-	const FVector DropLocation = GetActorLocation() + GetActorForwardVector() * 100.0f;
+	constexpr float DropForwardDistance = 100.0f;
+	constexpr float GroundTraceUpDistance = 200.0f;
+	constexpr float GroundTraceDownDistance = 400.0f;
+	const FVector DropTraceOrigin = GetActorLocation() + GetActorForwardVector() * DropForwardDistance;
+	const FVector GroundTraceStart = DropTraceOrigin + FVector(0.0f, 0.0f, GroundTraceUpDistance);
+	const FVector GroundTraceEnd = DropTraceOrigin - FVector(0.0f, 0.0f, GroundTraceDownDistance);
+	FCollisionQueryParams GroundTraceParams(FName(TEXT("SurvivalDropGroundTrace")), false, this);
+	FHitResult GroundHit;
+	if (!World->LineTraceSingleByChannel(GroundHit, GroundTraceStart, GroundTraceEnd, ECC_WorldStatic, GroundTraceParams))
+	{
+		UE_LOG(LogSurvivalCharacter, Warning, TEXT("Rejected drop because no ground was found in front of %s"), *GetName());
+		return;
+	}
+
+	// The interaction box may have padding, so never use it to place the item on the floor.
+	// Place the actor so the visible mesh's lowest point rests on the ground hit instead.
+	float MeshBottomOffset = 0.0f;
+	if (SurvivalItemDefinition->PickupMesh)
+	{
+		const FBoxSphereBounds PickupMeshBounds = SurvivalItemDefinition->PickupMesh->GetBounds();
+		MeshBottomOffset = PickupMeshBounds.Origin.Z - PickupMeshBounds.BoxExtent.Z;
+	}
+
+	FVector DropLocation = GroundHit.ImpactPoint;
+	DropLocation.Z -= MeshBottomOffset;
 	FSurvivalItemInstance RemovedSurvivalItemInstance;
 	if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RemovedSurvivalItemInstance))
 	{
@@ -248,31 +306,30 @@ void ASurvivalCharacter::ServerUseItem_Implementation(FGuid ItemInstanceId)
 		return;
 	}
 
-	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
+	USurvivalItemDefinition* SurvivalItemDefinition = SurvivalInventoryComponent->FindDefinitionAssetByInstanceId(ItemInstanceId);
 	const USurvivalConsumableItemDefinition* ConsumableItemDefinition = Cast<USurvivalConsumableItemDefinition>(SurvivalItemDefinition);
-	if (!ConsumableItemDefinition || ConsumableItemDefinition->HydrationRestoration <= 0.0f)
+	if (!ConsumableItemDefinition)
 	{
-		UE_LOG(LogSurvivalCharacter, Log, TEXT("Rejected use because item instance %s is not a hydrating consumable"), *ItemInstanceId.ToString());
+		UE_LOG(LogSurvivalCharacter, Log, TEXT("Rejected use because item instance %s is not a consumable"), *ItemInstanceId.ToString());
 		return;
 	}
 
-	const float HydrationRestoration = ConsumableItemDefinition->HydrationRestoration;
-	const float PreviousHydration = SurvivalVitalComponent->CurrentHydration;
-	if (!SurvivalVitalComponent->TryRestoreHydration(HydrationRestoration))
+	const FSurvivalVitalSnapshot PreviousVitalState = SurvivalVitalComponent->CaptureSnapshot();
+	if (!TryApplyConsumableEffects(ConsumableItemDefinition))
 	{
-		UE_LOG(LogSurvivalCharacter, Log, TEXT("Rejected use of %s because hydration is already full"), *ConsumableItemDefinition->GetName());
+		UE_LOG(LogSurvivalCharacter, Log, TEXT("Rejected use of %s because it produced no vital change"), *ConsumableItemDefinition->GetName());
 		return;
 	}
 
 	FSurvivalItemInstance RemovedSurvivalItemInstance;
 	if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RemovedSurvivalItemInstance))
 	{
-		SurvivalVitalComponent->SetCurrentHydration(PreviousHydration);
+		SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
 		UE_LOG(LogSurvivalCharacter, Warning, TEXT("Use of %s applied hydration but could not remove item instance %s"), *ConsumableItemDefinition->GetName(), *ItemInstanceId.ToString());
 		return;
 	}
 
-	UE_LOG(LogSurvivalCharacter, Log, TEXT("Used %s; hydration restored by %.1f for %s"), *ConsumableItemDefinition->GetName(), HydrationRestoration, *GetName());
+	UE_LOG(LogSurvivalCharacter, Log, TEXT("Used %s for %s"), *ConsumableItemDefinition->GetName(), *GetName());
 }
 
 void ASurvivalCharacter::PossessedBy(AController* NewController)
@@ -280,4 +337,13 @@ void ASurvivalCharacter::PossessedBy(AController* NewController)
 	Super::PossessedBy(NewController);
 
 	UE_LOG(LogSurvivalCharacter, Log, TEXT("Character %s was possessed by controller %s"), *GetName(), NewController ? *NewController->GetName() : TEXT("None"));
+}
+
+void ASurvivalCharacter::Jump()
+{
+	Super::Jump();
+	if (VitalComponent && GetCharacterMovement() && GetCharacterMovement()->IsFalling())
+	{
+		VitalComponent->NotifyJumpActivity();
+	}
 }
