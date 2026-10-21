@@ -75,7 +75,11 @@ An item does not need a pickup mesh to appear inside a searchable container, but
 7. Set `Maximum Rolled Items`.
    - Use `1` for a visible spawn point.
    - Use `2` or `3` for a searchable container.
-8. Add entries to the `Entries` array.
+8. Set `Empty Roll Chance`.
+   - Use `0.15` for the default 15% empty chance.
+   - Use a higher value, such as `0.50`, for a harsher survival location.
+   - Use `0.0` when at least one valid entry should always be returned.
+9. Add entries to the `Entries` array.
 
 Beginner rule: only add items that make sense for this table. Do not put every possible item into one table and rely on tags to remove the wrong ones.
 
@@ -102,6 +106,8 @@ Remedy     Weight 1
 Among valid entries, the rough distribution is 5:3:1. The exact result is randomized each time the table is rolled.
 
 The system also has an intentional chance to return no item. A valid loot table is allowed to produce an empty fridge or an empty spawn point.
+
+`Empty Roll Chance` is evaluated for each possible result. For a table with multiple rolled items, a later roll may still stop early because of this chance. It is not a guarantee that every container receives its maximum number of items.
 
 ## 4. Optional advanced filtering with Gameplay Tags
 
@@ -222,6 +228,8 @@ DA_Loot_Kitchen_Counter
 ```
 
 Set the maximum rolled items to `1` for the countertop table. Set the fridge and cabinet tables to `2` or `3` if they will be used by searchable containers.
+
+For this demo, use `Empty Roll Chance = 0.50` on each table if the kitchen should feel sparse. Use `0.15` to keep the default more generous behavior while learning the system.
 
 ### Place the actors
 

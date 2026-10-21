@@ -16,7 +16,7 @@ void USurvivalLootTable::RollItems(const FGameplayTagContainer& ContextTags, FRa
 			}
 		}
 
-		if (TotalWeight <= 0.0f || RandomStream.FRand() > 0.85f)
+		if (TotalWeight <= 0.0f || RandomStream.FRand() < FMath::Clamp(EmptyRollChance, 0.0f, 1.0f))
 		{
 			break;
 		}

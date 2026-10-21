@@ -8,6 +8,7 @@
 class USurvivalItemDefinition;
 class USurvivalLootTable;
 class APickup;
+class UArrowComponent;
 
 UCLASS()
 class SURVIVAL_API ASurvivalLootSpawnPoint : public AActor
@@ -17,13 +18,16 @@ class SURVIVAL_API ASurvivalLootSpawnPoint : public AActor
 public:
 	ASurvivalLootSpawnPoint();
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Editor-only arrow showing this spawn point's location and forward direction. It is hidden during gameplay."))
+	TObjectPtr<UArrowComponent> PlacementMarker;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Context tags supplied to the loot table when this point rolls. Use them to restrict or exclude entries."))
 	FGameplayTagContainer ContextTags;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Loot table rolled when this point is populated. Leave empty to disable spawning at this point."))
 	TObjectPtr<USurvivalLootTable> LootTable;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1", UIMin = "1"))
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1", UIMin = "1", ToolTip = "Maximum number of item instances this point may contain during one population roll."))
 	int32 MaximumContents = 1;
 
 	bool HasContents() const;

@@ -56,6 +56,14 @@ Follow Epic's [C++ Coding Standard for Unreal Engine](https://dev.epicgames.com/
 - Use respectful, inclusive, professional language in names, comments, UI text, errors, and notifications. Avoid slang, profanity, stereotypes, and terms such as `blacklist`, `whitelist`, `master`, and `slave`; use precise alternatives.
 - Avoid unnecessary whitespace-only or mass-renaming changes mixed with behavioral changes. Keep functions and methods focused, split large logic into named sub-functions, and minimize dependency distance.
 
+### Editor-Facing Property Documentation
+
+- Every designer-facing `UPROPERTY` must include a clear `ToolTip` metadata description.
+- Tooltips must explain the property's purpose, units or scale, valid range, and any special zero, empty, or tag-matching behavior.
+- Apply this rule to data assets, actor instances, components, structs, and other properties exposed in the Unreal Details panel.
+- Treat hover documentation as part of the feature: add or update the tooltip whenever an exposed property is added or its behavior changes.
+- For transformable actors, use a valid `USceneComponent` root so the standard Actor Transform fields remain available in the Details panel.
+
 ## Output style
 
 The reader has ADHD. Shape every response so it can be acted on:

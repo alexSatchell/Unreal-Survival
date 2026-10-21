@@ -1,4 +1,5 @@
 #include "SurvivalLootSpawnPoint.h"
+#include "Components/ArrowComponent.h"
 #include "Engine/World.h"
 #include "SurvivalLootTable.h"
 #include "Pickup.h"
@@ -8,6 +9,11 @@
 ASurvivalLootSpawnPoint::ASurvivalLootSpawnPoint()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	PlacementMarker = CreateDefaultSubobject<UArrowComponent>(TEXT("PlacementMarker"));
+	PlacementMarker->ArrowSize = 1.0f;
+	PlacementMarker->SetArrowColor(FLinearColor(0.1f, 0.8f, 1.0f, 1.0f));
+	PlacementMarker->SetHiddenInGame(true);
+	RootComponent = PlacementMarker;
 	SetActorHiddenInGame(true);
 	SetCanBeDamaged(false);
 }
