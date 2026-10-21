@@ -23,13 +23,13 @@ class SURVIVAL_API USurvivalItemDefinition : public UPrimaryDataAsset
 public:
 	static FPrimaryAssetType GetPrimaryAssetType() { return FPrimaryAssetType(TEXT("SurvivalItemDefinition")); }
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item", meta = (ToolTip = "Name shown in interaction prompts, inventory entries, and other item UI."))
 	FText DisplayName;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Physical", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Physical", meta = (ClampMin = "0.0", UIMin = "0.0", ToolTip = "Inventory weight of one item instance, used by capacity and carrying systems."))
 	float Weight = 1.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World", meta = (ToolTip = "Static mesh displayed when this item is represented as a pickup in the world."))
 	TObjectPtr<UStaticMesh> PickupMesh;
 
 	virtual void GetWorldInteractionOptions(TArray<FInteractionOptionData>& OutOptions) const;

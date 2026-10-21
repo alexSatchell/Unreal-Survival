@@ -145,6 +145,7 @@ bool ASurvivalCharacter::TryApplyConsumableEffects(const USurvivalConsumableItem
 	bAppliedEffect |= VitalComponent->TryRestoreHunger(ConsumableItemDefinition->HungerRestoration);
 	bAppliedEffect |= VitalComponent->TryApplyHealthDelta(ConsumableItemDefinition->HealthEffect);
 	bAppliedEffect |= VitalComponent->TryApplyIllness(ConsumableItemDefinition->SicknessTag, ConsumableItemDefinition->SicknessSeverity, ConsumableItemDefinition->SicknessDurationGameSeconds);
+	bAppliedEffect |= VitalComponent->TryApplySicknessRecovery(ConsumableItemDefinition->SicknessRecoveryTags, ConsumableItemDefinition->SicknessRecoveryPoints, ConsumableItemDefinition->SicknessRecoveryDurationGameSeconds);
 	bAppliedEffect |= VitalComponent->TryCureIllnesses(ConsumableItemDefinition->SicknessCureTags);
 	return bAppliedEffect;
 }

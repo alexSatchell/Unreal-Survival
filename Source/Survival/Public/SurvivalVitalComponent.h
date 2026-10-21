@@ -13,12 +13,27 @@ struct SURVIVAL_API FSurvivalIllnessState
 	UPROPERTY(BlueprintReadOnly, Category = "Sickness")
 	FGameplayTag IllnessTag;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Sickness", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(BlueprintReadOnly, Category = "Sickness", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float Severity = 0.0f;
 
 	/** A value of zero means this illness persists until a matching cure is applied. */
 	UPROPERTY(BlueprintReadOnly, Category = "Sickness", meta = (ClampMin = "0.0"))
 	float RemainingDurationGameSeconds = 0.0f;
+};
+
+USTRUCT(BlueprintType)
+struct SURVIVAL_API FSurvivalSicknessRecoveryState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Sickness|Recovery")
+	FGameplayTagContainer RecoveryTags;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Sickness|Recovery", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float RemainingRecoveryPoints = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Sickness|Recovery", meta = (ClampMin = "0.0"))
+	float RecoveryRatePointsPerGameSecond = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -37,6 +52,9 @@ struct SURVIVAL_API FSurvivalVitalSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Vitals")
 	TArray<FSurvivalIllnessState> ActiveIllnesses;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Vitals|Sickness")
+	TArray<FSurvivalSicknessRecoveryState> ActiveSicknessRecoveries;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnSurvivalVitalsChanged, float, HealthPercent, float, HungerPercent, float, HydrationPercent, float, SicknessPercent);
@@ -83,6 +101,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Vitals|Sickness")
 	bool TryCureIllnesses(const FGameplayTagContainer& CureTags);
 
+	UFUNCTION(BlueprintCallable, Category = "Vitals|Sickness")
+	bool TryApplySicknessRecovery(const FGameplayTagContainer& RecoveryTags, float RecoveryPoints, float DurationGameSeconds);
+
 	UFUNCTION(BlueprintPure, Category = "Vitals|Sickness")
 	float GetSicknessPercent() const;
 
@@ -128,6 +149,7 @@ protected:
 
 private:
 	void ApplyWorldTimeDelta(float InElapsedGameSeconds);
+	bool ApplySicknessRecovery(float InElapsedGameSeconds);
 	void ApplyActivityCost(float InCost);
 	void BroadcastVitalsChanged();
 	void ApplyMovementPenalty();
@@ -135,7 +157,10 @@ private:
 	void HandleDeath();
 	float GetActivityMultiplier() const;
 	float GetSicknessSeverityTotal() const;
+	bool HasMatchingIllness(const FGameplayTagContainer& RecoveryTags) const;
 	const class USurvivalGameplayData* GetGameplayData() const;
+
+	TArray<FSurvivalSicknessRecoveryState> ActiveSicknessRecoveries;
 
 	UFUNCTION()
 	void OnRep_CurrentHealth();

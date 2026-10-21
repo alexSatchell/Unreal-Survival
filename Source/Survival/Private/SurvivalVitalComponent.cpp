@@ -139,7 +139,7 @@ bool USurvivalVitalComponent::TryRestoreHydration(const float Amount)
 
 	const float PreviousHydration = CurrentHydration;
 	SetCurrentHydration(CurrentHydration + Amount);
-	return !FMath::IsNearlyEqual(PreviousHydration, CurrentHydration);
+	return Amount > 0.0f && (CurrentHydration > PreviousHydration || FMath::IsNearlyEqual(CurrentHydration, MaxHydration));
 }
 
 void USurvivalVitalComponent::SetCurrentHydration(const float NewHydration)
@@ -166,7 +166,7 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		return false;
 	}
 
-	const float ClampedSeverity = FMath::Clamp(Severity, 0.0f, 1.0f);
+	const float ClampedSeverity = FMath::Clamp(Severity, 0.0f, 100.0f);
 	for (FSurvivalIllnessState& Illness : ActiveIllnesses)
 	{
 		if (Illness.IllnessTag != IllnessTag)
@@ -183,7 +183,7 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		{
 			BroadcastVitalsChanged();
 		}
-		return bChanged;
+		return true;
 	}
 
 	FSurvivalIllnessState NewIllness;
@@ -192,6 +192,21 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 	NewIllness.RemainingDurationGameSeconds = FMath::Max(DurationGameSeconds, 0.0f);
 	ActiveIllnesses.Add(NewIllness);
 	BroadcastVitalsChanged();
+	return true;
+}
+
+bool USurvivalVitalComponent::TryApplySicknessRecovery(const FGameplayTagContainer& RecoveryTags, const float RecoveryPoints, const float DurationGameSeconds)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || RecoveryTags.IsEmpty() || RecoveryPoints <= 0.0f || DurationGameSeconds <= 0.0f || !HasMatchingIllness(RecoveryTags))
+	{
+		return false;
+	}
+
+	FSurvivalSicknessRecoveryState NewRecovery;
+	NewRecovery.RecoveryTags = RecoveryTags;
+	NewRecovery.RemainingRecoveryPoints = FMath::Clamp(RecoveryPoints, 0.0f, 100.0f);
+	NewRecovery.RecoveryRatePointsPerGameSecond = NewRecovery.RemainingRecoveryPoints / DurationGameSeconds;
+	ActiveSicknessRecoveries.Add(MoveTemp(NewRecovery));
 	return true;
 }
 
@@ -209,13 +224,14 @@ bool USurvivalVitalComponent::TryCureIllnesses(const FGameplayTagContainer& Cure
 		return false;
 	}
 
+	ActiveSicknessRecoveries.RemoveAll([this](const FSurvivalSicknessRecoveryState& Recovery) { return !HasMatchingIllness(Recovery.RecoveryTags); });
 	BroadcastVitalsChanged();
 	return true;
 }
 
 float USurvivalVitalComponent::GetSicknessPercent() const
 {
-	return FMath::Clamp(GetSicknessSeverityTotal(), 0.0f, 1.0f);
+	return FMath::Clamp(GetSicknessSeverityTotal() / 100.0f, 0.0f, 1.0f);
 }
 
 void USurvivalVitalComponent::NotifyJumpActivity()
@@ -241,6 +257,7 @@ FSurvivalVitalSnapshot USurvivalVitalComponent::CaptureSnapshot() const
 	Snapshot.Hunger = CurrentHunger;
 	Snapshot.Hydration = CurrentHydration;
 	Snapshot.ActiveIllnesses = ActiveIllnesses;
+	Snapshot.ActiveSicknessRecoveries = ActiveSicknessRecoveries;
 	return Snapshot;
 }
 
@@ -255,6 +272,7 @@ void USurvivalVitalComponent::RestoreSnapshot(const FSurvivalVitalSnapshot& Snap
 	CurrentHunger = FMath::Clamp(Snapshot.Hunger, 0.0f, MaxHunger);
 	CurrentHydration = FMath::Clamp(Snapshot.Hydration, 0.0f, MaxHydration);
 	ActiveIllnesses = Snapshot.ActiveIllnesses;
+	ActiveSicknessRecoveries = Snapshot.ActiveSicknessRecoveries;
 	bHasHandledDeath = CurrentHealth <= 0.0f;
 	ApplyMovementPenalty();
 	BroadcastVitalsChanged();
@@ -273,6 +291,7 @@ void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSecon
 	const float DrainScale = InElapsedGameSeconds / GameDayDuration * ActivityMultiplier;
 	const float PreviousHunger = CurrentHunger;
 	const float PreviousHydration = CurrentHydration;
+	bool bSicknessChanged = ApplySicknessRecovery(InElapsedGameSeconds);
 	CurrentHunger = FMath::Clamp(CurrentHunger - SurvivalData->HungerDrainPerGameDay * DrainScale, 0.0f, MaxHunger);
 	CurrentHydration = FMath::Clamp(CurrentHydration - SurvivalData->HydrationDrainPerGameDay * DrainScale, 0.0f, MaxHydration);
 
@@ -285,13 +304,15 @@ void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSecon
 			if (Illness.RemainingDurationGameSeconds <= 0.0f)
 			{
 				ActiveIllnesses.RemoveAt(Index);
+				bSicknessChanged = true;
 			}
 		}
 	}
+	ActiveSicknessRecoveries.RemoveAll([this](const FSurvivalSicknessRecoveryState& Recovery) { return !HasMatchingIllness(Recovery.RecoveryTags); });
 
 	const int32 EmptyVitalCount = (CurrentHunger <= 0.0f ? 1 : 0) + (CurrentHydration <= 0.0f ? 1 : 0);
 	const float EmptyVitalDamage = EmptyVitalCount * SurvivalData->EmptyVitalHealthDamagePerGameDay * DrainScale;
-	const float SicknessDamage = GetSicknessSeverityTotal() * SurvivalData->SicknessHealthDamagePerGameDay * InElapsedGameSeconds / GameDayDuration;
+	const float SicknessDamage = GetSicknessSeverityTotal() / 100.0f * SurvivalData->SicknessHealthDamagePerGameDay * InElapsedGameSeconds / GameDayDuration;
 	const float PreviousHealth = CurrentHealth;
 	CurrentHealth = FMath::Clamp(CurrentHealth - EmptyVitalDamage - SicknessDamage, 0.0f, MaxHealth);
 
@@ -301,10 +322,53 @@ void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSecon
 		HandleDeath();
 	}
 
-	if (!FMath::IsNearlyEqual(PreviousHunger, CurrentHunger) || !FMath::IsNearlyEqual(PreviousHydration, CurrentHydration) || !FMath::IsNearlyEqual(PreviousHealth, CurrentHealth) || EmptyVitalCount > 0 || SicknessDamage > 0.0f)
+	if (!FMath::IsNearlyEqual(PreviousHunger, CurrentHunger) || !FMath::IsNearlyEqual(PreviousHydration, CurrentHydration) || !FMath::IsNearlyEqual(PreviousHealth, CurrentHealth) || EmptyVitalCount > 0 || SicknessDamage > 0.0f || bSicknessChanged)
 	{
 		BroadcastVitalsChanged();
 	}
+}
+
+bool USurvivalVitalComponent::ApplySicknessRecovery(const float InElapsedGameSeconds)
+{
+	bool bChanged = false;
+	for (int32 RecoveryIndex = ActiveSicknessRecoveries.Num() - 1; RecoveryIndex >= 0; --RecoveryIndex)
+	{
+		FSurvivalSicknessRecoveryState& Recovery = ActiveSicknessRecoveries[RecoveryIndex];
+		float RemainingToApply = FMath::Min(Recovery.RemainingRecoveryPoints, Recovery.RecoveryRatePointsPerGameSecond * InElapsedGameSeconds);
+		const float RequestedRecovery = RemainingToApply;
+		for (int32 IllnessIndex = ActiveIllnesses.Num() - 1; IllnessIndex >= 0 && RemainingToApply > KINDA_SMALL_NUMBER; --IllnessIndex)
+		{
+			FSurvivalIllnessState& Illness = ActiveIllnesses[IllnessIndex];
+			if (!Recovery.RecoveryTags.HasTag(Illness.IllnessTag))
+			{
+				continue;
+			}
+
+			const float AvailableSeconds = Illness.RemainingDurationGameSeconds > 0.0f ? FMath::Min(InElapsedGameSeconds, Illness.RemainingDurationGameSeconds) : InElapsedGameSeconds;
+			const float AvailableRecovery = Recovery.RecoveryRatePointsPerGameSecond * AvailableSeconds;
+			const float AppliedRecovery = FMath::Min3(RemainingToApply, AvailableRecovery, Illness.Severity);
+			if (AppliedRecovery <= 0.0f)
+			{
+				continue;
+			}
+
+			Illness.Severity = FMath::Max(0.0f, Illness.Severity - AppliedRecovery);
+			RemainingToApply -= AppliedRecovery;
+			bChanged = true;
+			if (Illness.Severity <= KINDA_SMALL_NUMBER)
+			{
+				ActiveIllnesses.RemoveAt(IllnessIndex);
+			}
+		}
+
+		Recovery.RemainingRecoveryPoints = FMath::Max(0.0f, Recovery.RemainingRecoveryPoints - (RequestedRecovery - RemainingToApply));
+		if (Recovery.RemainingRecoveryPoints <= KINDA_SMALL_NUMBER || !HasMatchingIllness(Recovery.RecoveryTags))
+		{
+			ActiveSicknessRecoveries.RemoveAt(RecoveryIndex);
+		}
+	}
+
+	return bChanged;
 }
 
 void USurvivalVitalComponent::ApplyActivityCost(const float InCost)
@@ -403,6 +467,19 @@ float USurvivalVitalComponent::GetSicknessSeverityTotal() const
 	}
 
 	return TotalSeverity;
+}
+
+bool USurvivalVitalComponent::HasMatchingIllness(const FGameplayTagContainer& RecoveryTags) const
+{
+	for (const FSurvivalIllnessState& Illness : ActiveIllnesses)
+	{
+		if (Illness.Severity > KINDA_SMALL_NUMBER && RecoveryTags.HasTag(Illness.IllnessTag))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 const USurvivalGameplayData* USurvivalVitalComponent::GetGameplayData() const
