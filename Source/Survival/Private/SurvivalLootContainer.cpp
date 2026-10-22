@@ -1,4 +1,5 @@
 #include "SurvivalLootContainer.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "Net/UnrealNetwork.h"
@@ -19,8 +20,10 @@ namespace SurvivalLootContainerActions
 ASurvivalLootContainer::ASurvivalLootContainer()
 {
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SceneRoot->SetMobility(EComponentMobility::Static);
 	RootComponent = SceneRoot;
 	CollisionComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionComponent"));
+	CollisionComponent->SetMobility(EComponentMobility::Static);
 	CollisionComponent->SetBoxExtent(FVector(50.0f));
 	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);

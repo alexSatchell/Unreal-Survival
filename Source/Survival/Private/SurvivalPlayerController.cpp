@@ -386,6 +386,31 @@ bool ASurvivalPlayerController::IsValidInteractionTarget(const AActor* TargetAct
 	return IsValid(TargetActor) && TargetActor->GetWorld() == GetWorld() && TargetActor->GetClass()->ImplementsInterface(UInteractable::StaticClass());
 }
 
+AActor* ASurvivalPlayerController::ResolveInteractionTarget(AActor* HitActor) const
+{
+	if (IsValidInteractionTarget(HitActor))
+	{
+		return HitActor;
+	}
+
+	if (!IsValid(HitActor))
+	{
+		return nullptr;
+	}
+
+	TArray<AActor*> AttachedActors;
+	HitActor->GetAttachedActors(AttachedActors, true, true);
+	for (AActor* AttachedActor : AttachedActors)
+	{
+		if (IsValidInteractionTarget(AttachedActor))
+		{
+			return AttachedActor;
+		}
+	}
+
+	return nullptr;
+}
+
 bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVector& OutViewLocation, FName TraceTag) const
 {
 	const UWorld* World = GetWorld();
@@ -407,7 +432,7 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 	float BlockingDistance = InteractionDistance;
 	for (const FHitResult& HitResult : HitResults)
 	{
-		if (HitResult.GetActor() && !IsValidInteractionTarget(HitResult.GetActor()))
+		if (HitResult.GetActor() && !ResolveInteractionTarget(HitResult.GetActor()))
 		{
 			BlockingDistance = FMath::Min(BlockingDistance, HitResult.Distance > 0.0f ? HitResult.Distance : FVector::Distance(OutViewLocation, HitResult.ImpactPoint));
 		}
@@ -418,8 +443,8 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 	AActor* BestTargetActor = nullptr;
 	for (const FHitResult& HitResult : HitResults)
 	{
-		AActor* CandidateActor = HitResult.GetActor();
-		if (!IsValidInteractionTarget(CandidateActor))
+		AActor* CandidateActor = ResolveInteractionTarget(HitResult.GetActor());
+		if (!CandidateActor)
 		{
 			continue;
 		}
@@ -438,6 +463,10 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 			BestDistance = CandidateDistance;
 			BestTargetActor = CandidateActor;
 			OutHitResult = HitResult;
+			if (HitResult.GetActor() != CandidateActor)
+			{
+				OutHitResult.HitObjectHandle = FActorInstanceHandle(CandidateActor);
+			}
 		}
 	}
 

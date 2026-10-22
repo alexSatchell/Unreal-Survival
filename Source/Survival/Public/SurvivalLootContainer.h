@@ -19,22 +19,22 @@ class SURVIVAL_API ASurvivalLootContainer : public AActor, public IInteractable
 public:
 	ASurvivalLootContainer();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Scene root for the container actor. Use the actor Transform to position the container in the level."))
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Collision volume used by the interaction trace. It blocks the Visibility channel and should cover the container."))
 	TObjectPtr<UBoxComponent> CollisionComponent;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Name shown in the interaction prompt while the player is looking at this container."))
 	FText ContainerDisplayName;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Context tags passed to the loot table when this container is searched. Use them to filter eligible loot entries."))
 	FGameplayTagContainer ContextTags;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot")
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Loot table rolled when this container is first searched. Leave empty to make the container contain no generated loot."))
 	TObjectPtr<USurvivalLootTable> LootTable;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1", UIMin = "1", ClampMax = "3", UIMax = "3"))
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1", UIMin = "1", ClampMax = "3", UIMax = "3", ToolTip = "Maximum number of item instances this container can generate when it is searched."))
 	int32 MaximumContents = 3;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Contents, BlueprintReadOnly, Category = "Loot")

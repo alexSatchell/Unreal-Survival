@@ -176,7 +176,7 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 
 		const float PreviousSeverity = Illness.Severity;
 		const float PreviousDuration = Illness.RemainingDurationGameSeconds;
-		Illness.Severity = FMath::Max(Illness.Severity, ClampedSeverity);
+		Illness.Severity = FMath::Clamp(Illness.Severity + ClampedSeverity, 0.0f, 100.0f);
 		Illness.RemainingDurationGameSeconds = Illness.RemainingDurationGameSeconds <= 0.0f || DurationGameSeconds <= 0.0f ? 0.0f : FMath::Max(Illness.RemainingDurationGameSeconds, DurationGameSeconds);
 		const bool bChanged = !FMath::IsNearlyEqual(PreviousSeverity, Illness.Severity) || !FMath::IsNearlyEqual(PreviousDuration, Illness.RemainingDurationGameSeconds);
 		if (bChanged)

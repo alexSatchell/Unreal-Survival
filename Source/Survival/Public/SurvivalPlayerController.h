@@ -38,6 +38,7 @@ private:
 	void OpenInventoryOverlay();
 	void CloseInventoryOverlay();
 	bool IsValidInteractionTarget(const AActor* TargetActor) const;
+	AActor* ResolveInteractionTarget(AActor* HitActor) const;
 	bool TraceInteraction(FHitResult& OutHitResult, FVector& OutViewLocation, FName TraceTag) const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
