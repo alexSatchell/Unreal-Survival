@@ -23,6 +23,18 @@ enum class EInteractionPromptState : uint8
 };
 
 USTRUCT(BlueprintType)
+struct SURVIVAL_API FInteractionOptionData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Interaction")
+	FName ActionId = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Interaction")
+	FText DisplayText;
+};
+
+USTRUCT(BlueprintType)
 struct SURVIVAL_API FInteractionPromptData
 {
 	GENERATED_BODY()
@@ -43,7 +55,13 @@ struct SURVIVAL_API FInteractionPromptData
 	FText DescriptionText;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Interaction")
-	FVector WorldOffset = FVector::ZeroVector;
+	FName DefaultActionId = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Interaction")
+	TArray<FInteractionOptionData> Options;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Interaction")
+	int32 SelectedOptionIndex = 0;
 };
 
 UINTERFACE(Blueprintable)
@@ -60,6 +78,9 @@ class SURVIVAL_API IInteractable
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	void Interact(AController* InteractingController);
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	void InteractWithAction(AController* InteractingController, FName ActionId);
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	FInteractionPromptData GetInteractionPrompt(AController* InteractingController) const;

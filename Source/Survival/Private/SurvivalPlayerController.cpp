@@ -1,18 +1,16 @@
 #include "SurvivalPlayerController.h"
+#include "CollisionShape.h"
 #include "CollisionQueryParams.h"
+#include "DrawDebugHelpers.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "InteractionPromptActor.h"
 #include "InteractionPromptWidget.h"
 #include "InputCoreTypes.h"
 #include "Interfaces/Interactable.h"
-#include "Pickup.h"
-#include "SurvivalCharacter.h"
-#include "SurvivalInventoryComponent.h"
-#include "SurvivalItemDefinition.h"
-#include "SurvivalPlayerState.h"
+#include "Math/RotationMatrix.h"
+#include "SurvivalHud.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalPlayerController, Log, All);
 
@@ -26,7 +24,12 @@ void ASurvivalPlayerController::BeginPlay()
 	}
 
 	GetWorldTimerManager().SetTimer(FocusTraceTimerHandle, this, &ASurvivalPlayerController::UpdateInteractionFocus, FMath::Max(FocusTraceInterval, 0.01f), true, 0.0f);
-	CreateInteractionPromptActor();
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->InitializeInteractionPrompt(InteractionPromptWidgetClass);
+		SurvivalHud->InitializeVitalsWidget(VitalsWidgetClass);
+		SurvivalHud->InitializeInventoryOverlayWidget(InventoryOverlayWidgetClass);
+	}
 
 	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
 	if (!LocalPlayer)
@@ -50,16 +53,29 @@ void ASurvivalPlayerController::BeginPlay()
 void ASurvivalPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(FocusTraceTimerHandle);
-	if (IsValid(InteractionPromptActor))
-	{
-		InteractionPromptActor->Destroy();
-	}
+	CloseInventoryOverlay();
+	CloseInteractionMenu();
 	Super::EndPlay(EndPlayReason);
+}
+
+void ASurvivalPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+
+	if (IsLocalController())
+	{
+		if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+		{
+			SurvivalHud->InitializeVitalsWidget(VitalsWidgetClass);
+			SurvivalHud->InitializeInventoryOverlayWidget(InventoryOverlayWidgetClass);
+		}
+	}
 }
 
 void ASurvivalPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
+	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ASurvivalPlayerController::HandleInventoryToggleInput);
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
@@ -72,14 +88,16 @@ void ASurvivalPlayerController::SetupInputComponent()
 			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input InteractAction is not configured for %s"), *GetName());
 		}
 
-		if (DropAction)
+		if (InteractionOptionsAction)
 		{
-			EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ASurvivalPlayerController::HandleDropInput);
+			EnhancedInputComponent->BindAction(InteractionOptionsAction, ETriggerEvent::Triggered, this, &ASurvivalPlayerController::HandleInteractionOptionsInput);
 		}
 		else
 		{
-			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input DropAction is not configured for %s"), *GetName());
+			// Keep wheel selection usable while the Enhanced Input action is being added to the project assets.
+			InputComponent->BindAxis(TEXT("MouseWheelAxis"), this, &ASurvivalPlayerController::HandleInteractionOptionsAxis);
 		}
+
 	}
 	else
 	{
@@ -87,86 +105,63 @@ void ASurvivalPlayerController::SetupInputComponent()
 	}
 }
 
+void ASurvivalPlayerController::HandleInteractionOptionsAxis(float AxisValue)
+{
+	HandleInteractionOptionsInput(FInputActionValue(AxisValue));
+}
+
 void ASurvivalPlayerController::HandleInteractInput()
 {
-	if (!IsLocalController())
+	if (!IsLocalController() || bInventoryOverlayOpen)
 	{
 		return;
 	}
 
+	AActor* TargetActor = FocusedInteractable.Get();
 	FVector ViewLocation;
 	FHitResult HitResult;
-	if (!TraceInteraction(HitResult, ViewLocation, FName(TEXT("InteractTrace"))))
+	if (!IsValidInteractionTarget(TargetActor) || !TraceInteraction(HitResult, ViewLocation, FName(TEXT("InteractTrace"))) || HitResult.GetActor() != TargetActor)
 	{
-		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace found no actor"));
+		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction input found no focused actor"));
 		return;
 	}
 
-	AActor* TargetActor = HitResult.GetActor();
-	if (!IsValidInteractionTarget(TargetActor))
+	const FInteractionPromptData PromptData = IInteractable::Execute_GetInteractionPrompt(TargetActor, this);
+	if (PromptData.DefaultActionId.IsNone() && PromptData.Options.Num() > 0)
 	{
-		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace hit a non-interactable actor"));
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Interaction target %s has options but no default action"), *TargetActor->GetName());
 		return;
 	}
 
 	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace found interactable actor %s"), *TargetActor->GetName());
-	ServerInteract(TargetActor);
+	ServerInteract(TargetActor, PromptData.DefaultActionId);
 }
 
-void ASurvivalPlayerController::HandleDropInput()
+void ASurvivalPlayerController::HandleInteractionOptionsInput(const FInputActionValue& InputActionValue)
 {
-	if (!IsLocalController() || !GetPawn())
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Drop input rejected because the controller is not local or has no pawn"));
-		return;
-	}
-
-	ASurvivalCharacter* ControlledCharacter = Cast<ASurvivalCharacter>(GetPawn());
-	USurvivalInventoryComponent* InventoryComponent = ControlledCharacter ? ControlledCharacter->GetInventoryComponent() : nullptr;
-	if (!InventoryComponent)
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Drop input rejected because the controlled character has no inventory component"));
-		return;
-	}
-
-	if (InventoryComponent->Items.IsEmpty())
-	{
-		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Drop input ignored because the replicated inventory is empty"));
-		return;
-	}
-
-	const FSurvivalItemInstance& FirstItem = InventoryComponent->Items[0];
-	if (!FirstItem.IsValid())
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Drop input rejected because the first inventory item is invalid"));
-		return;
-	}
-
-	ServerDropItem(FirstItem.InstanceId);
-}
-
-void ASurvivalPlayerController::CreateInteractionPromptActor()
-{
-	if (!InteractionPromptWidgetClass)
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Interaction prompt widget class is not configured for %s"), *GetName());
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
+	if (bInventoryOverlayOpen)
 	{
 		return;
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = this;
-	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	InteractionPromptActor = World->SpawnActor<AInteractionPromptActor>(AInteractionPromptActor::StaticClass(), FTransform::Identity, SpawnParameters);
-	if (InteractionPromptActor)
+	const float ScrollValue = InputActionValue.Get<float>();
+	if (FMath::IsNearlyZero(ScrollValue) || !IsValid(FocusedInteractable.Get()) || FocusedInteractionPrompt.Options.Num() < 2)
 	{
-		InteractionPromptActor->SetPromptWidgetClass(InteractionPromptWidgetClass);
-		InteractionPromptActor->SetPromptWorldScale(InteractionPromptWorldScale);
+		return;
+	}
+
+	if (!bInteractionMenuOpen)
+	{
+		OpenInteractionMenu();
+	}
+
+	const int32 OptionCount = FocusedInteractionPrompt.Options.Num();
+	const int32 ScrollDirection = ScrollValue > 0.0f ? 1 : -1;
+	SelectedInteractionOptionIndex = (SelectedInteractionOptionIndex + ScrollDirection + OptionCount) % OptionCount;
+	FocusedInteractionPrompt.SelectedOptionIndex = SelectedInteractionOptionIndex;
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, true, true);
 	}
 }
 
@@ -192,6 +187,11 @@ void ASurvivalPlayerController::UpdateInteractionFocus()
 	AActor* PreviousTargetActor = FocusedInteractable.Get();
 	if (PreviousTargetActor != TargetActor)
 	{
+		if (bInteractionMenuOpen)
+		{
+			CloseInteractionMenu();
+		}
+
 		if (TargetActor)
 		{
 			UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local interaction focus changed to %s"), *TargetActor->GetName());
@@ -204,24 +204,134 @@ void ASurvivalPlayerController::UpdateInteractionFocus()
 
 	FocusedInteractable = TargetActor;
 	FocusedInteractionPrompt = TargetActor ? IInteractable::Execute_GetInteractionPrompt(TargetActor, this) : FInteractionPromptData();
-	if (InteractionPromptActor)
+	if (TargetActor)
 	{
-		if (TargetActor)
+		SelectedInteractionOptionIndex = FMath::Clamp(SelectedInteractionOptionIndex, 0, FMath::Max(FocusedInteractionPrompt.Options.Num() - 1, 0));
+		FocusedInteractionPrompt.SelectedOptionIndex = SelectedInteractionOptionIndex;
+	}
+	else
+	{
+		SelectedInteractionOptionIndex = 0;
+	}
+
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, TargetActor != nullptr, bInteractionMenuOpen);
+	}
+}
+
+void ASurvivalPlayerController::OpenInteractionMenu()
+{
+	if (bInteractionMenuOpen || bInventoryOverlayOpen || !IsValidInteractionTarget(FocusedInteractable.Get()) || FocusedInteractionPrompt.Options.Num() < 2)
+	{
+		return;
+	}
+
+	bInteractionMenuOpen = true;
+	SelectedInteractionOptionIndex = 0;
+	FocusedInteractionPrompt.SelectedOptionIndex = SelectedInteractionOptionIndex;
+	SetIgnoreLookInput(true);
+	bShowMouseCursor = true;
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, true, true);
+	}
+}
+
+void ASurvivalPlayerController::HandleInventoryToggleInput()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (bInventoryOverlayOpen)
+	{
+		CloseInventoryOverlay();
+	}
+	else
+	{
+		OpenInventoryOverlay();
+	}
+}
+
+void ASurvivalPlayerController::OpenInventoryOverlay()
+{
+	if (bInventoryOverlayOpen)
+	{
+		return;
+	}
+
+	CloseInteractionMenu();
+	bInventoryOverlayOpen = true;
+	SetIgnoreLookInput(true);
+	bShowMouseCursor = true;
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->SetInventoryOverlayVisible(true);
+	}
+}
+
+void ASurvivalPlayerController::CloseInventoryOverlay()
+{
+	if (!bInventoryOverlayOpen)
+	{
+		return;
+	}
+
+	bInventoryOverlayOpen = false;
+	SetIgnoreLookInput(false);
+	bShowMouseCursor = false;
+	SetInputMode(FInputModeGameOnly());
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->SetInventoryOverlayVisible(false);
+	}
+}
+
+void ASurvivalPlayerController::CloseInteractionMenu()
+{
+	if (!bInteractionMenuOpen && !bShowMouseCursor)
+	{
+		return;
+	}
+
+	bInteractionMenuOpen = false;
+	SetIgnoreLookInput(false);
+	bShowMouseCursor = false;
+	SetInputMode(FInputModeGameOnly());
+	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
+	{
+		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, FocusedInteractable.IsValid(), false);
+	}
+}
+
+void ASurvivalPlayerController::SelectInteractionOption(FName ActionId)
+{
+	if (!IsLocalController() || !bInteractionMenuOpen || ActionId.IsNone() || !IsValidInteractionTarget(FocusedInteractable.Get()))
+	{
+		return;
+	}
+
+	for (const FInteractionOptionData& Option : FocusedInteractionPrompt.Options)
+	{
+		if (Option.ActionId == ActionId)
 		{
-			FVector BoundsOrigin;
-			FVector BoundsExtent;
-			TargetActor->GetActorBounds(false, BoundsOrigin, BoundsExtent);
-			const FVector PromptLocation = BoundsOrigin + FocusedInteractionPrompt.WorldOffset;
-			InteractionPromptActor->ShowPrompt(PromptLocation, ViewLocation, FocusedInteractionPrompt);
-		}
-		else
-		{
-			InteractionPromptActor->HidePrompt();
+			AActor* TargetActor = FocusedInteractable.Get();
+			CloseInteractionMenu();
+			ServerInteract(TargetActor, ActionId);
+			return;
 		}
 	}
 }
 
-void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActor)
+void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActor, FName ActionId)
 {
 	if (!HasAuthority())
 	{
@@ -242,86 +352,33 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because the server trace did not reach the target"), *TargetActor->GetName());
 		return;
 	}
-
-	if (FVector::DistSquared(ServerViewLocation, TargetActor->GetActorLocation()) > FMath::Square(InteractionDistance))
+	const float ServerHitDistance = ServerHitResult.Distance > 0.0f ? ServerHitResult.Distance : FVector::Distance(ServerViewLocation, ServerHitResult.ImpactPoint);
+	if (ServerHitDistance > InteractionDistance)
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because it is out of range"), *TargetActor->GetName());
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because the hit surface is out of range"), *TargetActor->GetName());
 		return;
 	}
 
-	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Server interacting with target actor %s"), *TargetActor->GetName());
-	IInteractable::Execute_Interact(TargetActor, this);
-}
-
-void ASurvivalPlayerController::ServerDropItem_Implementation(FGuid ItemInstanceId)
-{
-	if (!HasAuthority())
+	const FInteractionPromptData ServerPromptData = IInteractable::Execute_GetInteractionPrompt(TargetActor, this);
+	if (!ActionId.IsNone())
 	{
-		return;
+		const bool bActionIsAvailable = ServerPromptData.Options.ContainsByPredicate([ActionId](const FInteractionOptionData& Option) { return Option.ActionId == ActionId; });
+		if (!bActionIsAvailable)
+		{
+			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected unavailable interaction action %s for %s"), *ActionId.ToString(), *TargetActor->GetName());
+			return;
+		}
 	}
 
-	if (!ItemInstanceId.IsValid())
+	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Server interacting with target actor %s using action %s"), *TargetActor->GetName(), ActionId.IsNone() ? TEXT("Default") : *ActionId.ToString());
+	if (ActionId.IsNone())
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the request contained an invalid item instance ID"));
-		return;
+		IInteractable::Execute_Interact(TargetActor, this);
 	}
-
-	ASurvivalCharacter* ControlledCharacter = Cast<ASurvivalCharacter>(GetPawn());
-	USurvivalInventoryComponent* InventoryComponent = ControlledCharacter ? ControlledCharacter->GetInventoryComponent() : nullptr;
-	if (!ControlledCharacter || !InventoryComponent)
+	else
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop request for %s"), *GetName());
-		return;
+		IInteractable::Execute_InteractWithAction(TargetActor, this, ActionId);
 	}
-
-	FSurvivalItemInstance ItemInstance;
-	if (!InventoryComponent->FindItemByInstanceId(ItemInstanceId, ItemInstance))
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because item instance %s is not in the inventory"), *ItemInstanceId.ToString());
-		return;
-	}
-
-	USurvivalItemDefinition* ResolvedItemDefinition = InventoryComponent->FindItemDefinitionByInstanceId(ItemInstanceId);
-	if (!IsValid(ResolvedItemDefinition))
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the server definition for item instance %s is missing"), *ItemInstanceId.ToString());
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const FVector DropLocation = ControlledCharacter->GetActorLocation() + ControlledCharacter->GetActorForwardVector() * 100.0f;
-	FSurvivalItemInstance RemovedItem;
-	if (!InventoryComponent->TryRemoveItem(ItemInstanceId, RemovedItem))
-	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the inventory no longer contained the requested item for %s"), *GetName());
-		return;
-	}
-
-	const FTransform DropTransform(ControlledCharacter->GetActorRotation(), DropLocation);
-	APickup* DroppedPickup = World->SpawnActorDeferred<APickup>(APickup::StaticClass(), DropTransform, this, ControlledCharacter, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (!DroppedPickup)
-	{
-		InventoryComponent->TryAddItem(RemovedItem, ResolvedItemDefinition);
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected drop because the pickup could not spawn for %s"), *GetName());
-		return;
-	}
-
-	if (!DroppedPickup->InitializeItemInstance(RemovedItem, ResolvedItemDefinition))
-	{
-		DroppedPickup->Destroy();
-		InventoryComponent->TryAddItem(RemovedItem, ResolvedItemDefinition);
-		UE_LOG(LogSurvivalPlayerController, Error, TEXT("Rejected drop because the spawned pickup could not be initialized"));
-		return;
-	}
-
-	DroppedPickup->FinishSpawning(DropTransform);
-	DroppedPickup->ForceNetUpdate();
-	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Dropped item instance %s (%s) from %s"), *ItemInstanceId.ToString(), *ResolvedItemDefinition->GetName(), *GetName());
 }
 
 bool ASurvivalPlayerController::IsValidInteractionTarget(const AActor* TargetActor) const
@@ -342,5 +399,58 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 	GetPlayerViewPoint(OutViewLocation, ViewRotation);
 	const FVector TraceEnd = OutViewLocation + ViewRotation.Vector() * InteractionDistance;
 	const FCollisionQueryParams QueryParams(TraceTag, true, ControlledPawn);
-	return World->LineTraceSingleByChannel(OutHitResult, OutViewLocation, TraceEnd, ECC_Visibility, QueryParams);
+	// A short sphere sweep gives the player forgiving aim without making every pickup's collision volume oversized.
+	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(InteractionTraceRadius);
+	TArray<FHitResult> HitResults;
+	World->SweepMultiByChannel(HitResults, OutViewLocation, TraceEnd, FQuat::Identity, ECC_Visibility, TraceShape, QueryParams);
+	const FVector TraceDirection = (TraceEnd - OutViewLocation).GetSafeNormal();
+	float BlockingDistance = InteractionDistance;
+	for (const FHitResult& HitResult : HitResults)
+	{
+		if (HitResult.GetActor() && !IsValidInteractionTarget(HitResult.GetActor()))
+		{
+			BlockingDistance = FMath::Min(BlockingDistance, HitResult.Distance > 0.0f ? HitResult.Distance : FVector::Distance(OutViewLocation, HitResult.ImpactPoint));
+		}
+	}
+
+	float BestAlignment = -1.0f;
+	float BestDistance = BIG_NUMBER;
+	AActor* BestTargetActor = nullptr;
+	for (const FHitResult& HitResult : HitResults)
+	{
+		AActor* CandidateActor = HitResult.GetActor();
+		if (!IsValidInteractionTarget(CandidateActor))
+		{
+			continue;
+		}
+
+		const float CandidateDistance = HitResult.Distance > 0.0f ? HitResult.Distance : FVector::Distance(OutViewLocation, HitResult.ImpactPoint);
+		if (CandidateDistance > BlockingDistance + InteractionTraceRadius)
+		{
+			continue;
+		}
+
+		const FVector CandidateDirection = (CandidateActor->GetActorLocation() - OutViewLocation).GetSafeNormal();
+		const float CandidateAlignment = FVector::DotProduct(TraceDirection, CandidateDirection);
+		if (CandidateAlignment > BestAlignment || (FMath::IsNearlyEqual(CandidateAlignment, BestAlignment) && CandidateDistance < BestDistance))
+		{
+			BestAlignment = CandidateAlignment;
+			BestDistance = CandidateDistance;
+			BestTargetActor = CandidateActor;
+			OutHitResult = HitResult;
+		}
+	}
+
+	const bool bSelectedTarget = BestTargetActor != nullptr;
+	if (bDrawInteractionTrace && IsLocalController())
+	{
+		// Draw the swept capsule, which makes the configured radius visible instead of showing only a thin center line.
+		const float TraceLength = FVector::Distance(OutViewLocation, TraceEnd);
+		const FVector CapsuleCenter = (OutViewLocation + TraceEnd) * 0.5f;
+		const FQuat CapsuleRotation = FRotationMatrix::MakeFromZ(TraceDirection).ToQuat();
+		const FColor TraceColor = bSelectedTarget ? FColor::Green : FColor::Red;
+		const float DrawDuration = FMath::Max(FocusTraceInterval * 1.5f, 0.1f);
+		DrawDebugCapsule(World, CapsuleCenter, TraceLength * 0.5f, InteractionTraceRadius, CapsuleRotation, TraceColor, false, DrawDuration, 0, 1.0f);
+	}
+	return bSelectedTarget;
 }

@@ -1,5 +1,6 @@
 #include "SurvivalGameMode.h"
 #include "SurvivalCharacter.h"
+#include "SurvivalGameplayData.h"
 #include "SurvivalGameState.h"
 #include "SurvivalHud.h"
 #include "SurvivalPlayerController.h"
@@ -9,6 +10,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogSurvivalGameMode, Log, All);
 
 ASurvivalGameMode::ASurvivalGameMode()
 {
+	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = ASurvivalCharacter::StaticClass();
 	GameStateClass = ASurvivalGameState::StaticClass();
 	HUDClass = ASurvivalHud::StaticClass();
@@ -16,17 +18,39 @@ ASurvivalGameMode::ASurvivalGameMode()
 	PlayerStateClass = ASurvivalPlayerState::StaticClass();
 }
 
+const USurvivalGameplayData* ASurvivalGameMode::GetGameplayData() const
+{
+	return GameplayData ? GameplayData : GetDefault<USurvivalGameplayData>();
+}
+
 void ASurvivalGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GetGameState<ASurvivalGameState>())
+	if (ASurvivalGameState* SurvivalGameState = GetGameState<ASurvivalGameState>())
 	{
-		TransitionToRoundState(ESurvivalRoundState::Waiting);
+		const USurvivalGameplayData* SurvivalData = GetGameplayData();
+		SurvivalGameState->InitializeWorldClock(SurvivalData->GameDayDurationSeconds, SurvivalData->DaylightDurationSeconds, SurvivalData->StartingWorldTimeSeconds);
+		TransitionToRoundState(ESurvivalRoundState::InProgress);
+	}
+}
+
+void ASurvivalGameMode::Tick(const float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	WorldClockAccumulator += FMath::Max(DeltaSeconds, 0.0f);
+	if (WorldClockAccumulator < 1.0f)
+	{
+		return;
 	}
 
-	// after 5 seconds set the match to inProgress state
-	GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::InProgress), 5.0f, false);
+	const float ElapsedSeconds = WorldClockAccumulator;
+	WorldClockAccumulator = 0.0f;
+	if (ASurvivalGameState* SurvivalGameState = GetGameState<ASurvivalGameState>())
+	{
+		SurvivalGameState->AdvanceWorldTime(ElapsedSeconds);
+	}
 }
 
 void ASurvivalGameMode::TransitionToRoundState(const ESurvivalRoundState NewState)
@@ -36,9 +60,4 @@ void ASurvivalGameMode::TransitionToRoundState(const ESurvivalRoundState NewStat
 		SurvivalGameState->SetRoundState(NewState);
 	}
 
-	if (NewState == ESurvivalRoundState::InProgress)
-	{
-		// if match is in progress, set the timer to transition to finished state after 60 seconds
-		GetWorldTimerManager().SetTimer(RoundStateTimerHandle, FTimerDelegate::CreateUObject(this, &ASurvivalGameMode::TransitionToRoundState, ESurvivalRoundState::Finished), 60.0f, false);
-	}
 }

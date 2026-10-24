@@ -2,12 +2,19 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Interfaces/Interactable.h"
 #include "UObject/PrimaryAssetId.h"
 #include "SurvivalItemDefinition.generated.h"
 
 class UStaticMesh;
 
-/** Defines shared identity and presentation data for an item type used by pickups and inventories. */
+namespace SurvivalItemInteractionActions
+{
+	static const FName Store = FName(TEXT("Store"));
+	static const FName Consume = FName(TEXT("Consume"));
+}
+
+/** Defines static data shared by every instance of an item type; inventories store instance identity while the server resolves this definition for weight and presentation. */
 UCLASS(BlueprintType)
 class SURVIVAL_API USurvivalItemDefinition : public UPrimaryDataAsset
 {
@@ -24,4 +31,6 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World")
 	TObjectPtr<UStaticMesh> PickupMesh;
+
+	virtual void GetWorldInteractionOptions(TArray<FInteractionOptionData>& OutOptions) const;
 };
