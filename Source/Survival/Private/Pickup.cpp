@@ -241,15 +241,16 @@ bool APickup::TryConsumeItem(AController* InteractingController)
 	}
 
 	const FString PickupName = GetName();
-	if (!Destroy())
+	const bool bDestroySucceeded = Destroy();
+	if (bDestroySucceeded || IsActorBeingDestroyed())
 	{
-		SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
-		UE_LOG(LogPickup, Warning, TEXT("Rejected consume action because pickup %s could not be destroyed"), *PickupName);
-		return false;
+		UE_LOG(LogPickup, Log, TEXT("Consumed %s directly from pickup for %s"), *ConsumableItemDefinition->GetName(), *SurvivalCharacter->GetName());
+		return true;
 	}
 
-	UE_LOG(LogPickup, Log, TEXT("Consumed %s directly from pickup for %s"), *ConsumableItemDefinition->GetName(), *SurvivalCharacter->GetName());
-	return true;
+	SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
+	UE_LOG(LogPickup, Warning, TEXT("Rejected consume action because pickup %s could not be destroyed"), *PickupName);
+	return false;
 }
 
 FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
