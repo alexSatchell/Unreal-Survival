@@ -1,7 +1,9 @@
 #include "UI/SurvivalHud.h"
 #include "Interaction/InteractionPromptWidget.h"
+#include "Interaction/SurvivalPlayerController.h"
 #include "GameFramework/PlayerController.h"
 #include "Character/SurvivalCharacter.h"
+#include "UI/SurvivalInteractionMenuWidget.h"
 #include "UI/SurvivalInventoryOverlayWidget.h"
 #include "Core/SurvivalPlayerState.h"
 #include "UI/SurvivalVitalsWidget.h"
@@ -27,6 +29,25 @@ void ASurvivalHud::InitializeInteractionPrompt(TSubclassOf<UInteractionPromptWid
 	InteractionPromptWidget->SetInteractionState(false, false, InteractionDotOpacity);
 }
 
+void ASurvivalHud::InitializeInteractionMenuWidget()
+{
+	if (InteractionMenuWidget || !GetOwningPlayerController())
+	{
+		return;
+	}
+
+	InteractionMenuWidget = CreateWidget<USurvivalInteractionMenuWidget>(GetOwningPlayerController(), USurvivalInteractionMenuWidget::StaticClass());
+	if (!InteractionMenuWidget)
+	{
+		UE_LOG(LogSurvivalHud, Warning, TEXT("Could not create interaction menu widget for %s"), *GetName());
+		return;
+	}
+
+	InteractionMenuWidget->AddToViewport(60);
+	InteractionMenuWidget->InitializeForController(Cast<ASurvivalPlayerController>(GetOwningPlayerController()));
+	InteractionMenuWidget->SetMenuOpen(false);
+}
+
 void ASurvivalHud::UpdateInteractionPrompt(const FInteractionPromptData& InPromptData, bool bInFocused, bool bInMenuOpen)
 {
 	if (!InteractionPromptWidget)
@@ -36,6 +57,11 @@ void ASurvivalHud::UpdateInteractionPrompt(const FInteractionPromptData& InPromp
 
 	InteractionPromptWidget->SetPromptData(InPromptData);
 	InteractionPromptWidget->SetInteractionState(bInFocused, bInMenuOpen, InteractionDotOpacity);
+	if (InteractionMenuWidget)
+	{
+		InteractionMenuWidget->SetPromptData(InPromptData);
+		InteractionMenuWidget->SetMenuOpen(bInMenuOpen);
+	}
 }
 
 void ASurvivalHud::InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InWidgetClass)
@@ -111,6 +137,7 @@ void ASurvivalHud::BeginPlay()
 
 	InitializeVitalsWidget(nullptr);
 	InitializeInventoryOverlayWidget(nullptr);
+	InitializeInteractionMenuWidget();
 	UE_LOG(LogSurvivalHud, Log, TEXT("Created code-built vitals and inventory overlays for %s"), *OwningPlayerController->GetName());
 	// LogLocalPlayerState();
 }

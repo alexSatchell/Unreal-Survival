@@ -5,6 +5,7 @@
 #include "SurvivalHud.generated.h"
 
 class UInteractionPromptWidget;
+class USurvivalInteractionMenuWidget;
 class USurvivalInventoryOverlayWidget;
 class USurvivalVitalsWidget;
 struct FInteractionPromptData;
@@ -17,6 +18,7 @@ class SURVIVAL_API ASurvivalHud : public AHUD
 
 public:
 	void InitializeInteractionPrompt(TSubclassOf<UInteractionPromptWidget> InWidgetClass);
+	void InitializeInteractionMenuWidget();
 	void InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InWidgetClass);
 	void InitializeInventoryOverlayWidget(TSubclassOf<USurvivalInventoryOverlayWidget> InWidgetClass);
 	void SetInventoryOverlayVisible(bool bInVisible);
@@ -33,6 +35,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInteractionPromptWidget> InteractionPromptWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USurvivalInteractionMenuWidget> InteractionMenuWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USurvivalVitalsWidget> VitalsWidget;

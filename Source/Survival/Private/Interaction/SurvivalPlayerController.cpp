@@ -27,6 +27,7 @@ void ASurvivalPlayerController::BeginPlay()
 	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
 	{
 		SurvivalHud->InitializeInteractionPrompt(InteractionPromptWidgetClass);
+		SurvivalHud->InitializeInteractionMenuWidget();
 		SurvivalHud->InitializeVitalsWidget(VitalsWidgetClass);
 		SurvivalHud->InitializeInventoryOverlayWidget(InventoryOverlayWidgetClass);
 	}
@@ -134,7 +135,13 @@ void ASurvivalPlayerController::HandleInteractInput()
 	}
 
 	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace found interactable actor %s"), *TargetActor->GetName());
-	ServerInteract(TargetActor, PromptData.DefaultActionId);
+	const FName SelectedActionId = PromptData.Options.IsValidIndex(SelectedInteractionOptionIndex) ? PromptData.Options[SelectedInteractionOptionIndex].ActionId : PromptData.DefaultActionId;
+	if (bInteractionMenuOpen)
+	{
+		CloseInteractionMenu();
+	}
+
+	ServerInteract(TargetActor, SelectedActionId);
 }
 
 void ASurvivalPlayerController::HandleInteractionOptionsInput(const FInputActionValue& InputActionValue)
@@ -150,18 +157,18 @@ void ASurvivalPlayerController::HandleInteractionOptionsInput(const FInputAction
 		return;
 	}
 
-	if (!bInteractionMenuOpen)
+	const int32 OptionCount = FocusedInteractionPrompt.Options.Num();
+	const int32 ScrollDirection = ScrollValue > 0.0f ? 1 : -1;
+	if (!bInteractionMenuOpen && FocusedInteractionPrompt.Style == EInteractionPromptStyle::Container)
 	{
 		OpenInteractionMenu();
 	}
 
-	const int32 OptionCount = FocusedInteractionPrompt.Options.Num();
-	const int32 ScrollDirection = ScrollValue > 0.0f ? 1 : -1;
 	SelectedInteractionOptionIndex = (SelectedInteractionOptionIndex + ScrollDirection + OptionCount) % OptionCount;
 	FocusedInteractionPrompt.SelectedOptionIndex = SelectedInteractionOptionIndex;
 	if (ASurvivalHud* SurvivalHud = GetHUD<ASurvivalHud>())
 	{
-		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, true, true);
+		SurvivalHud->UpdateInteractionPrompt(FocusedInteractionPrompt, true, bInteractionMenuOpen);
 	}
 }
 
@@ -187,10 +194,8 @@ void ASurvivalPlayerController::UpdateInteractionFocus()
 	AActor* PreviousTargetActor = FocusedInteractable.Get();
 	if (PreviousTargetActor != TargetActor)
 	{
-		if (bInteractionMenuOpen)
-		{
-			CloseInteractionMenu();
-		}
+		CloseInteractionMenu();
+		SelectedInteractionOptionIndex = 0;
 
 		if (TargetActor)
 		{
@@ -222,7 +227,7 @@ void ASurvivalPlayerController::UpdateInteractionFocus()
 
 void ASurvivalPlayerController::OpenInteractionMenu()
 {
-	if (bInteractionMenuOpen || bInventoryOverlayOpen || !IsValidInteractionTarget(FocusedInteractable.Get()) || FocusedInteractionPrompt.Options.Num() < 2)
+	if (bInteractionMenuOpen || bInventoryOverlayOpen || FocusedInteractionPrompt.Style != EInteractionPromptStyle::Container || FocusedInteractionPrompt.Options.Num() < 2 || !IsValidInteractionTarget(FocusedInteractable.Get()))
 	{
 		return;
 	}
@@ -314,7 +319,7 @@ void ASurvivalPlayerController::CloseInteractionMenu()
 
 void ASurvivalPlayerController::SelectInteractionOption(FName ActionId)
 {
-	if (!IsLocalController() || !bInteractionMenuOpen || ActionId.IsNone() || !IsValidInteractionTarget(FocusedInteractable.Get()))
+	if (!IsLocalController() || bInventoryOverlayOpen || ActionId.IsNone() || !IsValidInteractionTarget(FocusedInteractable.Get()))
 	{
 		return;
 	}
@@ -329,6 +334,7 @@ void ASurvivalPlayerController::SelectInteractionOption(FName ActionId)
 			return;
 		}
 	}
+
 }
 
 void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActor, FName ActionId)
