@@ -26,14 +26,7 @@ APickup::APickup()
 void APickup::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (IsValid(ItemDefinition))
-	{
-		ItemDefinitionId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-	}
-
-	ApplyItemPresentation(ItemDefinition);
+	ApplyItemDefinitionState(ItemDefinition);
 }
 
 void APickup::BeginPlay()
@@ -44,34 +37,25 @@ void APickup::BeginPlay()
 		return;
 	}
 
-	if (IsValid(ItemDefinition))
-	{
-		ItemDefinitionId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-	}
+	ApplyItemDefinitionState(ItemDefinition);
 
 	if (!ItemInstanceId.IsValid())
 	{
 		ItemInstanceId = FGuid::NewGuid();
 	}
-
-	ApplyItemPresentation(ResolveItemDefinition());
 }
 
-USurvivalItemDefinition* APickup::ResolveItemDefinition() const
+void APickup::ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition)
 {
-	if (IsValid(ItemDefinition))
+	if (!IsValid(InItemDefinition))
 	{
-		return ItemDefinition;
+		return;
 	}
 
-	return nullptr;
-}
-
-void APickup::ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition)
-{
-	if (IsValid(InItemDefinition) && InItemDefinition->PickupMesh)
+	ItemDefinitionId = InItemDefinition->GetPrimaryAssetId();
+	ReplicatedDisplayName = InItemDefinition->DisplayName;
+	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
+	if (InItemDefinition->PickupMesh)
 	{
 		MeshComponent->SetStaticMesh(InItemDefinition->PickupMesh);
 	}
@@ -95,11 +79,8 @@ bool APickup::InitializeItemInstance(const FSurvivalItemInstance& InItemInstance
 	}
 
 	ItemInstanceId = InItemInstance.InstanceId;
-	ItemDefinitionId = InItemInstance.ItemDefinitionId;
 	ItemDefinition = InItemDefinition;
-	ReplicatedDisplayName = InItemDefinition->DisplayName;
-	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
-	ApplyItemPresentation(InItemDefinition);
+	ApplyItemDefinitionState(InItemDefinition);
 	ForceNetUpdate();
 	return true;
 }
@@ -112,8 +93,7 @@ void APickup::Interact_Implementation(AController* InteractingController)
 		return;
 	}
 
-	USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
-	if (!IsValid(ResolvedItemDefinition))
+	if (!IsValid(ItemDefinition))
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because no item definition is assigned"), *GetName());
 		return;
@@ -121,15 +101,17 @@ void APickup::Interact_Implementation(AController* InteractingController)
 
 	ASurvivalCharacter* Character = InteractingController ? Cast<ASurvivalCharacter>(InteractingController->GetPawn()) : nullptr;
 	USurvivalInventoryComponent* CharacterInventory = Character ? Character->GetInventoryComponent() : nullptr;
+
 	if (!Character || !CharacterInventory)
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because the interacting character has no inventory"), *GetName());
 		return;
 	}
+
 	FSurvivalItemInstance ItemInstance;
 	ItemInstance.InstanceId = ItemInstanceId;
 	ItemInstance.ItemDefinitionId = ItemDefinitionId;
-	if (!CharacterInventory->TryAddItem(ItemInstance, ResolvedItemDefinition))
+	if (!CharacterInventory->TryAddItem(ItemInstance, ItemDefinition))
 	{
 		UE_LOG(LogPickup, Log, TEXT("Inventory rejected pickup %s"), *GetName());
 		return;
@@ -153,7 +135,6 @@ void APickup::Interact_Implementation(AController* InteractingController)
 		}
 
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
-		return;
 	}
 }
 
@@ -163,10 +144,9 @@ FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*
 	PromptData.Style = EInteractionPromptStyle::Pickup;
 	PromptData.State = EInteractionPromptState::Available;
 	PromptData.ActionText = NSLOCTEXT("Survival", "PickupAction", "Pick up");
-	const USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
-	if (ResolvedItemDefinition && !ResolvedItemDefinition->DisplayName.IsEmpty())
+	if (IsValid(ItemDefinition) && !ItemDefinition->DisplayName.IsEmpty())
 	{
-		PromptData.TargetText = ResolvedItemDefinition->DisplayName;
+		PromptData.TargetText = ItemDefinition->DisplayName;
 	}
 	else
 	{

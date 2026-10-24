@@ -58,7 +58,6 @@ private:
 	UFUNCTION()
 	void OnRep_PickupPresentation();
 
-	USurvivalItemDefinition* ResolveItemDefinition() const;
-	void ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition);
+	void ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition);
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };
