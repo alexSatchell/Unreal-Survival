@@ -236,6 +236,7 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 	const FVector DropTraceOrigin = GetActorLocation() + GetActorForwardVector() * DropForwardDistance;
 	const FVector GroundTraceStart = DropTraceOrigin + FVector(0.0f, 0.0f, GroundTraceUpDistance);
 	const FVector GroundTraceEnd = DropTraceOrigin - FVector(0.0f, 0.0f, GroundTraceDownDistance);
+	// Ignore this character and trace only world-static geometry so the item is placed on the nearby ground.
 	FCollisionQueryParams GroundTraceParams(FName(TEXT("SurvivalDropGroundTrace")), false, this);
 	FHitResult GroundHit;
 	if (!World->LineTraceSingleByChannel(GroundHit, GroundTraceStart, GroundTraceEnd, ECC_WorldStatic, GroundTraceParams))
@@ -245,16 +246,20 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 	}
 
 	// The interaction box may have padding, so never use it to place the item on the floor.
-	// Place the actor so the visible mesh's lowest point rests on the ground hit instead.
+	// Use the visible mesh bounds so its lowest point rests on the ground hit instead.
 	float MeshBottomOffset = 0.0f;
 	if (SurvivalItemDefinition->PickupMesh)
 	{
+		// Convert the mesh bounds into the vertical offset from its pivot to its lowest visible point.
 		const FBoxSphereBounds PickupMeshBounds = SurvivalItemDefinition->PickupMesh->GetBounds();
 		MeshBottomOffset = PickupMeshBounds.Origin.Z - PickupMeshBounds.BoxExtent.Z;
 	}
 
+	// The trace gives us the surface point; compensate for the mesh pivot so the item does not float or sink.
 	FVector DropLocation = GroundHit.ImpactPoint;
 	DropLocation.Z -= MeshBottomOffset;
+
+	// Remove the item only after finding a valid drop location; later spawn failures will restore this instance.
 	FSurvivalItemInstance RemovedSurvivalItemInstance;
 	if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RemovedSurvivalItemInstance))
 	{
@@ -262,10 +267,13 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 		return;
 	}
 
+	// Preserve the character's rotation while placing the pickup at the corrected ground location.
 	const FTransform DropTransform(GetActorRotation(), DropLocation);
+	// Defer spawning so the item instance can be initialized before the pickup finishes its actor lifecycle.
 	APickup* DroppedPickup = World->SpawnActorDeferred<APickup>(APickup::StaticClass(), DropTransform, this, this, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!DroppedPickup)
 	{
+		// The inventory was already changed, so restore the item when no pickup actor was created.
 		SurvivalInventoryComponent->TryAddItem(RemovedSurvivalItemInstance, SurvivalItemDefinition);
 		UE_LOG(LogSurvivalCharacter, Warning, TEXT("Rejected drop because the pickup could not spawn for %s"), *GetName());
 		return;
@@ -273,12 +281,14 @@ void ASurvivalCharacter::ServerDropItem_Implementation(FGuid ItemInstanceId)
 
 	if (!DroppedPickup->InitializeItemInstance(RemovedSurvivalItemInstance, SurvivalItemDefinition))
 	{
+		// Destroy the partially spawned actor and restore the inventory item if initialization rejects it.
 		DroppedPickup->Destroy();
 		SurvivalInventoryComponent->TryAddItem(RemovedSurvivalItemInstance, SurvivalItemDefinition);
 		UE_LOG(LogSurvivalCharacter, Error, TEXT("Rejected drop because the spawned pickup could not be initialized"));
 		return;
 	}
 
+	// Finish the deferred spawn and request prompt replication immediately for connected clients.
 	DroppedPickup->FinishSpawning(DropTransform);
 	DroppedPickup->ForceNetUpdate();
 	UE_LOG(LogSurvivalCharacter, Log, TEXT("Dropped item instance %s (%s) from %s"), *ItemInstanceId.ToString(), *SurvivalItemDefinition->GetName(), *GetName());
