@@ -26,13 +26,19 @@ void AInteractionPromptActor::SetPromptWorldScale(float InWorldScale)
 	WidgetComponent->SetRelativeScale3D(FVector(FMath::Max(InWorldScale, 0.01f)));
 }
 
+/**
+ * Positions the world-space prompt, rotates it to face the player's camera, then shows and updates the widget.
+ * WorldLocation is the prompt's desired position, while CameraLocation is the player's camera position.
+ * Subtracting them creates a direction vector from the prompt to the camera. FVector::Rotation() converts that
+ * direction into an FRotator, and SetActorRotation applies it so the prompt's forward direction faces the camera.
+ * Roll is cleared to keep the prompt upright. If both positions are nearly identical, the direction has no useful
+ * facing rotation, so the existing actor rotation is preserved.
+ */
 void AInteractionPromptActor::ShowPrompt(const FVector& WorldLocation, const FVector& CameraLocation, const FInteractionPromptData& InPromptData)
 {
 	SetActorLocation(WorldLocation);
 
 	FVector ToCamera = CameraLocation - WorldLocation;
-	// Only calculate a facing rotation when the camera has a meaningful direction from the prompt.
-	// IsNearlyZero also handles overlapping or nearly overlapping positions, where a zero-length vector has no valid facing direction.
 	if (!ToCamera.IsNearlyZero())
 	{
 		FRotator TargetRotation = ToCamera.Rotation();
