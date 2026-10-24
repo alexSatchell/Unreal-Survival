@@ -37,6 +37,16 @@ void USurvivalInventoryOverlayWidget::NativeDestruct()
 
 void USurvivalInventoryOverlayWidget::InitializeForCharacter(ASurvivalCharacter* InCharacter)
 {
+	if (Character.Get() != InCharacter)
+	{
+		if (bIsBoundToInventory && Character.IsValid() && Character->GetInventoryComponent())
+		{
+			Character->GetInventoryComponent()->OnInventoryChanged.RemoveDynamic(this, &USurvivalInventoryOverlayWidget::HandleInventoryChanged);
+		}
+
+		bIsBoundToInventory = false;
+	}
+
 	Character = InCharacter;
 	BindToInventory();
 	RefreshInventory();
