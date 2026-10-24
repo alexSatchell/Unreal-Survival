@@ -66,16 +66,22 @@ void APickup::ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition
 {
 	if (!IsValid(InItemDefinition))
 	{
+		// Clear the visible presentation so an invalid definition cannot leave an old mesh or collision volume behind.
 		ApplyItemPresentation(nullptr);
 		return;
 	}
 
+	// Copy the definition's stable identity and display data into the pickup state that can be replicated to clients.
 	DefinitionAssetId = InItemDefinition->GetPrimaryAssetId();
 	ReplicatedDisplayName = InItemDefinition->DisplayName;
 	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
+
+	// Ask the definition to build the actions this item supports, such as Store for all items or Consume for consumables.
 	ReplicatedInteractionOptions.Reset();
 	InItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
 	ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
+
+	// Apply the definition's mesh and resize the interaction volume to match it.
 	ApplyItemPresentation(InItemDefinition);
 }
 
@@ -89,6 +95,7 @@ void APickup::UpdateCollisionBounds()
 {
 	if (!MeshComponent || !CollisionComponent || !MeshComponent->GetStaticMesh())
 	{
+		// Without a mesh, use a centered fallback volume so the pickup still has a predictable query area.
 		CollisionComponent->SetRelativeLocation(FVector::ZeroVector);
 		CollisionComponent->SetBoxExtent(FVector(50.0f));
 		return;
@@ -97,8 +104,11 @@ void APickup::UpdateCollisionBounds()
 	FVector BoundsMin;
 	FVector BoundsMax;
 	MeshComponent->GetLocalBounds(BoundsMin, BoundsMax);
-	// Keep the pickup volume close to the visible mesh; the controller's sphere sweep provides forgiving targeting.
+
+	// Move the sibling collision component to the center of the mesh's local-space bounds.
 	CollisionComponent->SetRelativeLocation((BoundsMin + BoundsMax) * 0.5f);
+
+	// SetBoxExtent expects half-extents, so add the configured padding to each side of the mesh bounds.
 	CollisionComponent->SetBoxExtent((BoundsMax - BoundsMin) * 0.5f + CollisionPadding);
 }
 
