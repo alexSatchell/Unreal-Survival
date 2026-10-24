@@ -25,6 +25,7 @@ public:
 	void SetIsOpen(const bool bNewIsOpen);
 
 	virtual void Interact_Implementation(AController* InteractingController) override;
+	virtual FInteractionPromptData GetInteractionPrompt_Implementation(AController* InteractingController) const override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

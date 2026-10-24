@@ -1,6 +1,10 @@
 #include "Pickup.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/Controller.h"
+#include "Net/UnrealNetwork.h"
+#include "SurvivalItemDefinition.h"
+#include "SurvivalCharacter.h"
+#include "SurvivalInventoryComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPickup, Log, All);
 
@@ -16,8 +20,88 @@ APickup::APickup()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	MeshComponent->SetupAttachment(RootComponent);
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
 	bReplicates = true;
+}
+
+void APickup::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if (IsValid(ItemDefinition))
+	{
+		ItemDefinitionId = ItemDefinition->GetPrimaryAssetId();
+		ReplicatedDisplayName = ItemDefinition->DisplayName;
+		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
+	}
+
+	ApplyItemPresentation(ItemDefinition);
+}
+
+void APickup::BeginPlay()
+{
+	Super::BeginPlay();
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (IsValid(ItemDefinition))
+	{
+		ItemDefinitionId = ItemDefinition->GetPrimaryAssetId();
+		ReplicatedDisplayName = ItemDefinition->DisplayName;
+		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
+	}
+
+	if (!ItemInstanceId.IsValid())
+	{
+		ItemInstanceId = FGuid::NewGuid();
+	}
+
+	ApplyItemPresentation(ResolveItemDefinition());
+}
+
+USurvivalItemDefinition* APickup::ResolveItemDefinition() const
+{
+	if (IsValid(ItemDefinition))
+	{
+		return ItemDefinition;
+	}
+
+	return nullptr;
+}
+
+void APickup::ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition)
+{
+	if (IsValid(InItemDefinition) && InItemDefinition->PickupMesh)
+	{
+		MeshComponent->SetStaticMesh(InItemDefinition->PickupMesh);
+	}
+}
+
+void APickup::OnRep_ItemDefinitionId()
+{
+	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
+}
+
+void APickup::OnRep_PickupPresentation()
+{
+	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
+}
+
+bool APickup::InitializeItemInstance(const FSurvivalItemInstance& InItemInstance, USurvivalItemDefinition* InItemDefinition)
+{
+	if (!HasAuthority() || !InItemInstance.IsValid() || !IsValid(InItemDefinition) || InItemDefinition->GetPrimaryAssetId() != InItemInstance.ItemDefinitionId)
+	{
+		return false;
+	}
+
+	ItemInstanceId = InItemInstance.InstanceId;
+	ItemDefinitionId = InItemInstance.ItemDefinitionId;
+	ItemDefinition = InItemDefinition;
+	ReplicatedDisplayName = InItemDefinition->DisplayName;
+	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
+	ApplyItemPresentation(InItemDefinition);
+	ForceNetUpdate();
+	return true;
 }
 
 void APickup::Interact_Implementation(AController* InteractingController)
@@ -25,6 +109,29 @@ void APickup::Interact_Implementation(AController* InteractingController)
 	if (!HasAuthority())
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because it has no authority"), *GetName());
+		return;
+	}
+
+	USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
+	if (!IsValid(ResolvedItemDefinition))
+	{
+		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because no item definition is assigned"), *GetName());
+		return;
+	}
+
+	ASurvivalCharacter* Character = InteractingController ? Cast<ASurvivalCharacter>(InteractingController->GetPawn()) : nullptr;
+	USurvivalInventoryComponent* CharacterInventory = Character ? Character->GetInventoryComponent() : nullptr;
+	if (!Character || !CharacterInventory)
+	{
+		UE_LOG(LogPickup, Warning, TEXT("Rejected interaction with pickup %s because the interacting character has no inventory"), *GetName());
+		return;
+	}
+	FSurvivalItemInstance ItemInstance;
+	ItemInstance.InstanceId = ItemInstanceId;
+	ItemInstance.ItemDefinitionId = ItemDefinitionId;
+	if (!CharacterInventory->TryAddItem(ItemInstance, ResolvedItemDefinition))
+	{
+		UE_LOG(LogPickup, Log, TEXT("Inventory rejected pickup %s"), *GetName());
 		return;
 	}
 
@@ -39,4 +146,32 @@ void APickup::Interact_Implementation(AController* InteractingController)
 	{
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
 	}
+}
+
+FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
+{
+	FInteractionPromptData PromptData;
+	PromptData.Style = EInteractionPromptStyle::Pickup;
+	PromptData.State = EInteractionPromptState::Available;
+	PromptData.ActionText = NSLOCTEXT("Survival", "PickupAction", "Pick up");
+	const USurvivalItemDefinition* ResolvedItemDefinition = ResolveItemDefinition();
+	if (ResolvedItemDefinition && !ResolvedItemDefinition->DisplayName.IsEmpty())
+	{
+		PromptData.TargetText = ResolvedItemDefinition->DisplayName;
+	}
+	else
+	{
+		PromptData.TargetText = ReplicatedDisplayName.IsEmpty() ? NSLOCTEXT("Survival", "DefaultPickupTarget", "Item") : ReplicatedDisplayName;
+	}
+	PromptData.WorldOffset = PromptWorldOffset;
+	return PromptData;
+}
+
+void APickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(APickup, ItemInstanceId);
+	DOREPLIFETIME(APickup, ItemDefinitionId);
+	DOREPLIFETIME(APickup, ReplicatedDisplayName);
+	DOREPLIFETIME(APickup, ReplicatedPickupMesh);
 }
