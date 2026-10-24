@@ -66,12 +66,19 @@ void ASurvivalHud::UpdateInteractionPrompt(const FInteractionPromptData& InPromp
 
 void ASurvivalHud::InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InWidgetClass)
 {
-	if (VitalsWidget || !GetOwningPlayerController())
+	APlayerController* OwningPlayerController = GetOwningPlayerController();
+	if (!OwningPlayerController)
 	{
 		return;
 	}
 
-	TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
+	if (VitalsWidget)
+	{
+		VitalsWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(OwningPlayerController->GetPawn()));
+		return;
+	}
+
+TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalVitalsWidget::StaticClass();
@@ -84,17 +91,24 @@ void ASurvivalHud::InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InW
 	}
 
 	VitalsWidget->AddToViewport(10);
-	VitalsWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(GetOwningPlayerController()->GetPawn()));
+	VitalsWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(OwningPlayerController->GetPawn()));
 }
 
 void ASurvivalHud::InitializeInventoryOverlayWidget(TSubclassOf<USurvivalInventoryOverlayWidget> InWidgetClass)
 {
-	if (InventoryOverlayWidget || !GetOwningPlayerController())
+	APlayerController* OwningPlayerController = GetOwningPlayerController();
+	if (!OwningPlayerController)
 	{
 		return;
 	}
 
-	TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
+	if (InventoryOverlayWidget)
+	{
+		InventoryOverlayWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(OwningPlayerController->GetPawn()));
+		return;
+	}
+
+TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalInventoryOverlayWidget::StaticClass();
@@ -107,7 +121,7 @@ void ASurvivalHud::InitializeInventoryOverlayWidget(TSubclassOf<USurvivalInvento
 	}
 
 	InventoryOverlayWidget->AddToViewport(50);
-	InventoryOverlayWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(GetOwningPlayerController()->GetPawn()));
+	InventoryOverlayWidget->InitializeForCharacter(Cast<ASurvivalCharacter>(OwningPlayerController->GetPawn()));
 	InventoryOverlayWidget->SetOverlayOpen(false);
 }
 
