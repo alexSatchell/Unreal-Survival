@@ -11,7 +11,8 @@ enum class EInteractionPromptStyle : uint8
 {
 	Default,
 	Pickup,
-	Door
+	Door,
+	Container
 };
 
 UENUM(BlueprintType)
