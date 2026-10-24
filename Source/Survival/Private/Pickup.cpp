@@ -33,17 +33,7 @@ APickup::APickup()
 void APickup::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (IsValid(ItemDefinition))
-	{
-		DefinitionAssetId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-		ReplicatedInteractionOptions.Reset();
-		ItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-		ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	}
-
-	ApplyItemPresentation(ItemDefinition);
+	ApplyItemDefinitionState(ItemDefinition);
 }
 
 void APickup::BeginPlay()
@@ -54,22 +44,12 @@ void APickup::BeginPlay()
 		return;
 	}
 
-	if (IsValid(ItemDefinition))
-	{
-		DefinitionAssetId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-		ReplicatedInteractionOptions.Reset();
-		ItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-		ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	}
+	ApplyItemDefinitionState(ItemDefinition);
 
 	if (!ItemInstanceId.IsValid())
 	{
 		ItemInstanceId = FGuid::NewGuid();
 	}
-
-	ApplyItemPresentation(GetItemDefinition());
 }
 
 USurvivalItemDefinition* APickup::GetItemDefinition() const
@@ -80,6 +60,23 @@ USurvivalItemDefinition* APickup::GetItemDefinition() const
 	}
 
 	return nullptr;
+}
+
+void APickup::ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition)
+{
+	if (!IsValid(InItemDefinition))
+	{
+		ApplyItemPresentation(nullptr);
+		return;
+	}
+
+	DefinitionAssetId = InItemDefinition->GetPrimaryAssetId();
+	ReplicatedDisplayName = InItemDefinition->DisplayName;
+	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
+	ReplicatedInteractionOptions.Reset();
+	InItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
+	ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
+	ApplyItemPresentation(InItemDefinition);
 }
 
 void APickup::ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition)
@@ -107,11 +104,15 @@ void APickup::UpdateCollisionBounds()
 
 void APickup::OnRep_DefinitionAssetId()
 {
-	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
-	UpdateCollisionBounds();
+	UpdatePickupMesh();
 }
 
-void APickup::OnRep_PickupPresentation()
+void APickup::OnRep_PickupMesh()
+{
+	UpdatePickupMesh();
+}
+
+void APickup::UpdatePickupMesh()
 {
 	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
 	UpdateCollisionBounds();
@@ -125,14 +126,8 @@ bool APickup::InitializeItemInstance(const FSurvivalItemInstance& InItemInstance
 	}
 
 	ItemInstanceId = InItemInstance.InstanceId;
-	DefinitionAssetId = InItemInstance.DefinitionAssetId;
 	ItemDefinition = InItemDefinition;
-	ReplicatedDisplayName = InItemDefinition->DisplayName;
-	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
-	ReplicatedInteractionOptions.Reset();
-	InItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-	ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	ApplyItemPresentation(InItemDefinition);
+	ApplyItemDefinitionState(InItemDefinition);
 	ForceNetUpdate();
 	return true;
 }
