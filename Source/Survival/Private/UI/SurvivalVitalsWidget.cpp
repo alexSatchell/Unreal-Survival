@@ -37,6 +37,16 @@ void USurvivalVitalsWidget::NativeDestruct()
 
 void USurvivalVitalsWidget::InitializeForCharacter(ASurvivalCharacter* InCharacter)
 {
+	if (Character.Get() != InCharacter)
+	{
+		if (bIsBoundToVitals && Character.IsValid() && Character->GetVitalComponent())
+		{
+			Character->GetVitalComponent()->OnVitalsChanged.RemoveDynamic(this, &USurvivalVitalsWidget::HandleVitalsChanged);
+		}
+
+		bIsBoundToVitals = false;
+	}
+
 	Character = InCharacter;
 	BindToCharacter();
 }
