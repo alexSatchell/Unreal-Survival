@@ -52,6 +52,7 @@ FInteractionPromptData ADoor::GetInteractionPrompt_Implementation(AController*) 
 	FInteractionPromptData PromptData;
 	PromptData.Style = EInteractionPromptStyle::Door;
 	PromptData.State = EInteractionPromptState::Available;
+	PromptData.TargetText = NSLOCTEXT("Survival", "DoorInteractionTarget", "Door");
 	PromptData.ActionText = bIsOpen ? NSLOCTEXT("Survival", "CloseDoorAction", "Close") : NSLOCTEXT("Survival", "OpenDoorAction", "Open");
 	return PromptData;
 }
