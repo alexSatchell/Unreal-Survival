@@ -193,13 +193,22 @@ bool APickup::TryStoreItem(AController* InteractingController)
 	const FString PickupName = GetName();
 	UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *PickupName, InteractingController ? *InteractingController->GetName() : TEXT("None"));
 
-	if (Destroy())
+	const bool bDestroySucceeded = Destroy();
+	if (bDestroySucceeded || IsActorBeingDestroyed())
 	{
 		UE_LOG(LogPickup, Log, TEXT("Server destroyed consumed pickup %s"), *PickupName);
 	}
 	else
 	{
+		FSurvivalItemInstance RolledBackItem;
+		if (!SurvivalInventoryComponent->TryRemoveItem(ItemInstanceId, RolledBackItem))
+		{
+			UE_LOG(LogPickup, Error, TEXT("Pickup %s could not be destroyed and its inventory item could not be rolled back"), *PickupName);
+			return false;
+		}
+
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
+		return false;
 	}
 	return true;
 }
@@ -227,7 +236,8 @@ bool APickup::TryConsumeItem(AController* InteractingController)
 	}
 
 	const FString PickupName = GetName();
-	if (!Destroy())
+	const bool bDestroySucceeded = Destroy();
+	if (!bDestroySucceeded && !IsActorBeingDestroyed())
 	{
 		SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
 		UE_LOG(LogPickup, Warning, TEXT("Rejected consume action because pickup %s could not be destroyed"), *PickupName);
