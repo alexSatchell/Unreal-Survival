@@ -155,6 +155,7 @@ void APickup::Interact_Implementation(AController* InteractingController)
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
 		return;
 	}
+}
 
 FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
 {
