@@ -1,5 +1,8 @@
 #include "SurvivalPlayerController.h"
 #include "CollisionQueryParams.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "Interfaces/Interactable.h"
@@ -7,26 +10,53 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalPlayerController, Log, All);
 
-void ASurvivalPlayerController::SetupInputComponent()
+void ASurvivalPlayerController::BeginPlay()
 {
-	Super::SetupInputComponent();
+	Super::BeginPlay();
 
-	if (InputComponent)
-	{
-		InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ASurvivalPlayerController::HandleReadyInput);
-		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &ASurvivalPlayerController::HandleInteractInput);
-	}
-}
-
-void ASurvivalPlayerController::HandleReadyInput()
-{
 	if (!IsLocalController())
 	{
 		return;
 	}
 
-	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local player pressed R to become ready"));
-	ServerSetReady();
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	if (!LocalPlayer)
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input local player is unavailable for %s"), *GetName());
+		return;
+	}
+
+	if (!PlayerMappingContext)
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input PlayerMappingContext is not configured for %s"), *GetName());
+		return;
+	}
+
+	if (UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+	{
+		InputSubsystem->AddMappingContext(PlayerMappingContext, 0);
+	}
+}
+
+void ASurvivalPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ASurvivalPlayerController::HandleInteractInput);
+		}
+		else
+		{
+			UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input InteractAction is not configured for %s"), *GetName());
+		}
+	}
+	else
+	{
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Enhanced Input component is unavailable for %s"), *GetName());
+	}
 }
 
 void ASurvivalPlayerController::HandleInteractInput()
@@ -36,24 +66,16 @@ void ASurvivalPlayerController::HandleInteractInput()
 		return;
 	}
 
-	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Local player pressed I to interact"));
-
 	FVector ViewLocation;
-	FRotator ViewRotation;
-	GetPlayerViewPoint(ViewLocation, ViewRotation);
-
-	const FVector TraceEnd = ViewLocation + ViewRotation.Vector() * 1000.0f;
 	FHitResult HitResult;
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(InteractTrace), true, GetPawn());
-
-	if (!GetWorld() || !GetWorld()->LineTraceSingleByChannel(HitResult, ViewLocation, TraceEnd, ECC_Visibility, QueryParams))
+	if (!TraceInteraction(HitResult, ViewLocation, FName(TEXT("InteractTrace"))))
 	{
 		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace found no actor"));
 		return;
 	}
 
 	AActor* TargetActor = HitResult.GetActor();
-	if (!TargetActor || !TargetActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
+	if (!IsValidInteractionTarget(TargetActor))
 	{
 		UE_LOG(LogSurvivalPlayerController, Log, TEXT("Interaction trace hit a non-interactable actor"));
 		return;
@@ -71,21 +93,23 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 		return;
 	}
 
-	if (!IsValid(TargetActor))
+	if (!IsValidInteractionTarget(TargetActor))
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction because the target actor is invalid"));
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction because the target actor is invalid or not interactable"));
 		return;
 	}
 
-	if (TargetActor->GetWorld() != GetWorld())
+	FVector ServerViewLocation;
+	FHitResult ServerHitResult;
+	if (!TraceInteraction(ServerHitResult, ServerViewLocation, FName(TEXT("ServerInteractTrace"))) || ServerHitResult.GetActor() != TargetActor)
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because it is in a different world"), *TargetActor->GetName());
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because the server trace did not reach the target"), *TargetActor->GetName());
 		return;
 	}
 
-	if (!TargetActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
+	if (FVector::DistSquared(ServerViewLocation, TargetActor->GetActorLocation()) > FMath::Square(InteractionDistance))
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because it does not implement Interactable"), *TargetActor->GetName());
+		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because it is out of range"), *TargetActor->GetName());
 		return;
 	}
 
@@ -93,14 +117,23 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 	IInteractable::Execute_Interact(TargetActor, this);
 }
 
-void ASurvivalPlayerController::ServerSetReady_Implementation()
+bool ASurvivalPlayerController::IsValidInteractionTarget(const AActor* TargetActor) const
 {
-	ASurvivalPlayerState* SurvivalPlayerState = GetPlayerState<ASurvivalPlayerState>();
-	if (!SurvivalPlayerState)
+	return IsValid(TargetActor) && TargetActor->GetWorld() == GetWorld() && TargetActor->GetClass()->ImplementsInterface(UInteractable::StaticClass());
+}
+
+bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVector& OutViewLocation, FName TraceTag) const
+{
+	const UWorld* World = GetWorld();
+	const APawn* ControlledPawn = GetPawn();
+	if (!World || !ControlledPawn)
 	{
-		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Could not set player ready because SurvivalPlayerState is unavailable"));
-		return;
+		return false;
 	}
 
-	SurvivalPlayerState->SetIsReady(true);
+	FRotator ViewRotation;
+	GetPlayerViewPoint(OutViewLocation, ViewRotation);
+	const FVector TraceEnd = OutViewLocation + ViewRotation.Vector() * InteractionDistance;
+	const FCollisionQueryParams QueryParams(TraceTag, true, ControlledPawn);
+	return World->LineTraceSingleByChannel(OutHitResult, OutViewLocation, TraceEnd, ECC_Visibility, QueryParams);
 }
