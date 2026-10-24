@@ -34,10 +34,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_ItemDefinitionId, BlueprintReadOnly, Category = "Pickup")
 	FPrimaryAssetId ItemDefinitionId;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Pickup")
 	FText ReplicatedDisplayName;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	UPROPERTY(ReplicatedUsing = OnRep_PickupMesh, BlueprintReadOnly, Category = "Pickup")
 	TObjectPtr<UStaticMesh> ReplicatedPickupMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
@@ -56,8 +56,9 @@ private:
 	void OnRep_ItemDefinitionId();
 
 	UFUNCTION()
-	void OnRep_PickupPresentation();
+	void OnRep_PickupMesh();
 
 	void ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition);
+	void UpdatePickupMesh();
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

@@ -63,10 +63,15 @@ void APickup::ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition
 
 void APickup::OnRep_ItemDefinitionId()
 {
-	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
+	UpdatePickupMesh();
 }
 
-void APickup::OnRep_PickupPresentation()
+void APickup::OnRep_PickupMesh()
+{
+	UpdatePickupMesh();
+}
+
+void APickup::UpdatePickupMesh()
 {
 	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
 }
