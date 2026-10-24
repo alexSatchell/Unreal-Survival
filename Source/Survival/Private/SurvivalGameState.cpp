@@ -17,6 +17,19 @@ void ASurvivalGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASurvivalGameState, RoundState);
+	DOREPLIFETIME(ASurvivalGameState, WorldTimeSeconds);
+	DOREPLIFETIME(ASurvivalGameState, GameDayDurationSeconds);
+	DOREPLIFETIME(ASurvivalGameState, DaylightDurationSeconds);
+}
+
+float ASurvivalGameState::GetWorldDayFraction() const
+{
+	return GameDayDurationSeconds > 0.0f ? WorldTimeSeconds / GameDayDurationSeconds : 0.0f;
+}
+
+bool ASurvivalGameState::IsNight() const
+{
+	return WorldTimeSeconds >= DaylightDurationSeconds;
 }
 
 void ASurvivalGameState::SetRoundState(const ESurvivalRoundState NewState)
@@ -41,9 +54,38 @@ void ASurvivalGameState::SetRoundState(const ESurvivalRoundState NewState)
 	UE_LOG(LogSurvivalGameState, Log, TEXT("Server round state changed: %s -> %s"), *PreviousState, *NewStateName);
 }
 
+void ASurvivalGameState::InitializeWorldClock(const float InGameDayDurationSeconds, const float InDaylightDurationSeconds, const float InStartingWorldTimeSeconds)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GameDayDurationSeconds = FMath::Max(InGameDayDurationSeconds, 1.0f);
+	DaylightDurationSeconds = FMath::Clamp(InDaylightDurationSeconds, 0.0f, GameDayDurationSeconds);
+	WorldTimeSeconds = FMath::Fmod(FMath::Max(InStartingWorldTimeSeconds, 0.0f), GameDayDurationSeconds);
+	ForceNetUpdate();
+}
+
+void ASurvivalGameState::AdvanceWorldTime(const float InElapsedSeconds)
+{
+	if (!HasAuthority() || InElapsedSeconds <= 0.0f || GameDayDurationSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	WorldTimeSeconds = FMath::Fmod(WorldTimeSeconds + InElapsedSeconds, GameDayDurationSeconds);
+	OnWorldTimeAdvanced.Broadcast(InElapsedSeconds);
+}
+
 void ASurvivalGameState::OnRep_RoundState(const ESurvivalRoundState PreviousRoundState) const
 {
 	const FString PreviousState = UE::Survival::Private::RoundStateToString(PreviousRoundState);
 	const FString CurrentState = UE::Survival::Private::RoundStateToString(RoundState);
 	UE_LOG(LogSurvivalGameState, Log, TEXT("Client received round state change: %s -> %s"), *PreviousState, *CurrentState);
+}
+
+void ASurvivalGameState::OnRep_WorldTime() const
+{
+	UE_LOG(LogSurvivalGameState, VeryVerbose, TEXT("Client received world time %.1f seconds"), WorldTimeSeconds);
 }

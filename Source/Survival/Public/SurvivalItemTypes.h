@@ -4,7 +4,7 @@
 #include "UObject/PrimaryAssetId.h"
 #include "SurvivalItemTypes.generated.h"
 
-/** Identifies one physical item instance and its static item definition. */
+/** Identifies one physical item instance without duplicating the shared data asset that defines its item type. */
 USTRUCT(BlueprintType)
 struct SURVIVAL_API FSurvivalItemInstance
 {
@@ -14,7 +14,13 @@ struct SURVIVAL_API FSurvivalItemInstance
 	FGuid InstanceId;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Item")
-	FPrimaryAssetId ItemDefinitionId;
+	FPrimaryAssetId DefinitionAssetId;
 
-	bool IsValid() const { return InstanceId.IsValid() && ItemDefinitionId.IsValid(); }
+	UPROPERTY(BlueprintReadOnly, Category = "Item|Presentation")
+	FText DisplayName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Item|Presentation")
+	bool bIsConsumable = false;
+
+	bool IsValid() const { return InstanceId.IsValid() && DefinitionAssetId.IsValid(); }
 };
