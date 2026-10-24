@@ -47,6 +47,15 @@ void ADoor::Interact_Implementation(AController* InteractingController)
 	SetIsOpen(!bIsOpen);
 }
 
+FInteractionPromptData ADoor::GetInteractionPrompt_Implementation(AController*) const
+{
+	FInteractionPromptData PromptData;
+	PromptData.Style = EInteractionPromptStyle::Door;
+	PromptData.State = EInteractionPromptState::Available;
+	PromptData.ActionText = bIsOpen ? NSLOCTEXT("Survival", "CloseDoorAction", "Close") : NSLOCTEXT("Survival", "OpenDoorAction", "Open");
+	return PromptData;
+}
+
 void ADoor::OnRep_IsOpen(const bool bPreviousIsOpen) const
 {
 	UE_LOG(LogDoor, Log, TEXT("Client received replicated IsOpen change for %s: %s -> %s"), *GetName(), bPreviousIsOpen ? TEXT("true") : TEXT("false"), bIsOpen ? TEXT("true") : TEXT("false"));
