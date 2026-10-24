@@ -31,6 +31,8 @@ void AInteractionPromptActor::ShowPrompt(const FVector& WorldLocation, const FVe
 	SetActorLocation(WorldLocation);
 
 	FVector ToCamera = CameraLocation - WorldLocation;
+	// Only calculate a facing rotation when the camera has a meaningful direction from the prompt.
+	// IsNearlyZero also handles overlapping or nearly overlapping positions, where a zero-length vector has no valid facing direction.
 	if (!ToCamera.IsNearlyZero())
 	{
 		FRotator TargetRotation = ToCamera.Rotation();
