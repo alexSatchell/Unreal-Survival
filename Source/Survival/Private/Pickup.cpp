@@ -138,15 +138,23 @@ void APickup::Interact_Implementation(AController* InteractingController)
 	const FString PickupName = GetName();
 	UE_LOG(LogPickup, Log, TEXT("Pickup %s was interacted with by controller %s"), *PickupName, InteractingController ? *InteractingController->GetName() : TEXT("None"));
 
-	if (Destroy())
+	const bool bDestroySucceeded = Destroy();
+	if (bDestroySucceeded || IsActorBeingDestroyed())
 	{
 		UE_LOG(LogPickup, Log, TEXT("Server destroyed consumed pickup %s"), *PickupName);
 	}
 	else
 	{
+		FSurvivalItemInstance RolledBackItem;
+		if (!CharacterInventory->TryRemoveItem(ItemInstanceId, RolledBackItem))
+		{
+			UE_LOG(LogPickup, Error, TEXT("Pickup %s could not be destroyed and its inventory item could not be rolled back"), *PickupName);
+			return;
+		}
+
 		UE_LOG(LogPickup, Warning, TEXT("Server could not destroy consumed pickup %s"), *PickupName);
+		return;
 	}
-}
 
 FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
 {
