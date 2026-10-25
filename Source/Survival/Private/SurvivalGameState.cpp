@@ -24,11 +24,13 @@ void ASurvivalGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 float ASurvivalGameState::GetWorldDayFraction() const
 {
+	// Convert the current position within the repeating game day to a normalized 0-to-1 value for clocks, lighting, or other world-time visuals.
 	return GameDayDurationSeconds > 0.0f ? WorldTimeSeconds / GameDayDurationSeconds : 0.0f;
 }
 
 bool ASurvivalGameState::IsNight() const
 {
+	// WorldTimeSeconds wraps at GameDayDurationSeconds, so any time after daylight ends is within the night's portion of the current game day.
 	return WorldTimeSeconds >= DaylightDurationSeconds;
 }
 
@@ -75,6 +77,7 @@ void ASurvivalGameState::AdvanceWorldTime(const float InElapsedSeconds)
 	}
 
 	WorldTimeSeconds = FMath::Fmod(WorldTimeSeconds + InElapsedSeconds, GameDayDurationSeconds);
+	// Notify server-side systems, such as vital decay, that the authoritative game clock has advanced by this amount.
 	OnWorldTimeAdvanced.Broadcast(InElapsedSeconds);
 }
 
