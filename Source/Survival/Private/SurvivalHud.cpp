@@ -52,7 +52,7 @@ void ASurvivalHud::InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InW
 		return;
 	}
 
-TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
+	TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalVitalsWidget::StaticClass();
