@@ -7,6 +7,22 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalHud, Log, All);
 
+void ASurvivalHud::BeginPlay()
+{
+	Super::BeginPlay();
+
+	APlayerController* OwningPlayerController = GetOwningPlayerController();
+	UE_LOG(LogSurvivalHud, Log, TEXT("HUD %s began play for owning player controller %s"), *GetName(), OwningPlayerController ? *OwningPlayerController->GetName() : TEXT("None"));
+	if (!OwningPlayerController || !OwningPlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	InitializeVitalsWidget(nullptr);
+	InitializeInventoryOverlayWidget(nullptr);
+	UE_LOG(LogSurvivalHud, Log, TEXT("Created code-built vitals and inventory overlays for %s"), *OwningPlayerController->GetName());
+}
+
 void ASurvivalHud::InitializeInteractionPrompt(TSubclassOf<UInteractionPromptWidget> InWidgetClass)
 {
 	if (!InWidgetClass || !GetOwningPlayerController() || InteractionPromptWidget)
@@ -109,20 +125,4 @@ void ASurvivalHud::SetInventoryOverlayVisible(const bool bInVisible)
 bool ASurvivalHud::IsInventoryOverlayVisible() const
 {
 	return InventoryOverlayWidget && InventoryOverlayWidget->GetVisibility() == ESlateVisibility::Visible;
-}
-
-void ASurvivalHud::BeginPlay()
-{
-	Super::BeginPlay();
-
-	APlayerController* OwningPlayerController = GetOwningPlayerController();
-	UE_LOG(LogSurvivalHud, Log, TEXT("HUD %s began play for owning player controller %s"), *GetName(), OwningPlayerController ? *OwningPlayerController->GetName() : TEXT("None"));
-	if (!OwningPlayerController || !OwningPlayerController->IsLocalController())
-	{
-		return;
-	}
-
-	InitializeVitalsWidget(nullptr);
-	InitializeInventoryOverlayWidget(nullptr);
-	UE_LOG(LogSurvivalHud, Log, TEXT("Created code-built vitals and inventory overlays for %s"), *OwningPlayerController->GetName());
 }
