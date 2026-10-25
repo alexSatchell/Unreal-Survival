@@ -25,7 +25,6 @@ public:
 	void SetInventoryOverlayVisible(bool bInVisible);
 	bool IsInventoryOverlayVisible() const;
 	void UpdateInteractionPrompt(const FInteractionPromptData& InPromptData, bool bInFocused, bool bInMenuOpen);
-	void LogLocalPlayerState() const;
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Interaction|UI", meta = (ClampMin = "0.0", ClampMax = "1.0"))
