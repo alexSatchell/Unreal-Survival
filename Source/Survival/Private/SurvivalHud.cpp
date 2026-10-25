@@ -82,7 +82,7 @@ void ASurvivalHud::InitializeInventoryOverlayWidget(TSubclassOf<USurvivalInvento
 		return;
 	}
 
-TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
+	TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalInventoryOverlayWidget::StaticClass();
