@@ -397,6 +397,7 @@ bool ASurvivalPlayerController::IsValidInteractionTarget(const AActor* TargetAct
 
 bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVector& OutViewLocation, FName TraceTag) const
 {
+	// The trace needs a valid world for collision queries and a pawn to provide the player's current viewpoint.
 	const UWorld* World = GetWorld();
 	const APawn* ControlledPawn = GetPawn();
 	if (!World || !ControlledPawn)
@@ -404,25 +405,34 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 		return false;
 	}
 
+	// Start the trace at the camera and use the controller's view rotation to aim it where the player is looking.
 	FRotator ViewRotation;
 	GetPlayerViewPoint(OutViewLocation, ViewRotation);
+	// FRotator::Vector() converts the view rotation into a normalized forward direction.
 	const FVector TraceEnd = OutViewLocation + ViewRotation.Vector() * InteractionDistance;
+	// Ignore the controlled pawn so the trace does not select the player's own collision; the tag identifies this query in debug tools.
 	const FCollisionQueryParams QueryParams(TraceTag, true, ControlledPawn);
-	// A short sphere sweep gives the player forgiving aim without making every pickup's collision volume oversized.
+	// Sweep a sphere instead of a thin ray to make small interactables easier to target without enlarging their collision volumes.
 	const FCollisionShape TraceShape = FCollisionShape::MakeSphere(InteractionTraceRadius);
 	TArray<FHitResult> HitResults;
+	// A multi-hit visibility sweep returns every collision along the trace so we can find blockers and choose the best interactable.
 	World->SweepMultiByChannel(HitResults, OutViewLocation, TraceEnd, FQuat::Identity, ECC_Visibility, TraceShape, QueryParams);
+	// Normalize the trace direction so its dot product with a candidate direction measures how centered that candidate is.
 	const FVector TraceDirection = (TraceEnd - OutViewLocation).GetSafeNormal();
+	// Start with the full interaction range; nearer non-interactable hits below will shorten the usable range.
 	float BlockingDistance = InteractionDistance;
 	for (const FHitResult& HitResult : HitResults)
 	{
 		if (HitResult.GetActor() && !IsValidInteractionTarget(HitResult.GetActor()))
 		{
+			// Treat the nearest non-interactable collision as an obstruction so the player cannot target an interactable through it.
 			BlockingDistance = FMath::Min(BlockingDistance, HitResult.Distance > 0.0f ? HitResult.Distance : FVector::Distance(OutViewLocation, HitResult.ImpactPoint));
 		}
 	}
 
+	// Dot products range from -1 to 1, so -1 ensures the first valid candidate can replace the initial score.
 	float BestAlignment = -1.0f;
+	// Use a very large initial distance so distance can break ties between equally aligned candidates.
 	float BestDistance = BIG_NUMBER;
 	AActor* BestTargetActor = nullptr;
 	for (const FHitResult& HitResult : HitResults)
@@ -430,19 +440,25 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 		AActor* CandidateActor = HitResult.GetActor();
 		if (!IsValidInteractionTarget(CandidateActor))
 		{
+			// Ignore world geometry and other actors that cannot receive interaction requests.
 			continue;
 		}
 
+		// Use the trace distance when available and fall back to the actual contact point for initial-overlap results.
 		const float CandidateDistance = HitResult.Distance > 0.0f ? HitResult.Distance : FVector::Distance(OutViewLocation, HitResult.ImpactPoint);
 		if (CandidateDistance > BlockingDistance + InteractionTraceRadius)
 		{
+			// Do not select a valid actor substantially behind an obstruction; the radius allows for the sweep's thickness.
 			continue;
 		}
 
+		// Compare the direction to the actor's center with the camera direction to measure how closely the player is aiming at it.
 		const FVector CandidateDirection = (CandidateActor->GetActorLocation() - OutViewLocation).GetSafeNormal();
+		// A higher dot product means the candidate is more centered in the player's view; a tie is resolved by distance.
 		const float CandidateAlignment = FVector::DotProduct(TraceDirection, CandidateDirection);
 		if (CandidateAlignment > BestAlignment || (FMath::IsNearlyEqual(CandidateAlignment, BestAlignment) && CandidateDistance < BestDistance))
 		{
+			// Keep the best candidate and its hit result so callers can verify the exact actor that was selected.
 			BestAlignment = CandidateAlignment;
 			BestDistance = CandidateDistance;
 			BestTargetActor = CandidateActor;
@@ -450,10 +466,11 @@ bool ASurvivalPlayerController::TraceInteraction(FHitResult& OutHitResult, FVect
 		}
 	}
 
+	// Convert the selected actor pointer into the boolean result expected by the focus and server-interaction callers.
 	const bool bSelectedTarget = BestTargetActor != nullptr;
 	if (bDrawInteractionTrace && IsLocalController())
 	{
-		// Draw the swept capsule, which makes the configured radius visible instead of showing only a thin center line.
+		// Draw the swept capsule so the configured radius and full trace path are visible during local debugging.
 		const float TraceLength = FVector::Distance(OutViewLocation, TraceEnd);
 		const FVector CapsuleCenter = (OutViewLocation + TraceEnd) * 0.5f;
 		const FQuat CapsuleRotation = FRotationMatrix::MakeFromZ(TraceDirection).ToQuat();
