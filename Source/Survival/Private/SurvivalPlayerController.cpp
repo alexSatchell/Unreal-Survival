@@ -369,6 +369,7 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 	if (!ActionId.IsNone())
 	{
 		// An explicit action is valid only when the target currently advertises that action.
+		// Loop through the available options and check whether any option has the requested action ID.
 		const bool bActionIsAvailable = ServerPromptData.Options.ContainsByPredicate([ActionId](const FInteractionOptionData& Option) { return Option.ActionId == ActionId; });
 		if (!bActionIsAvailable)
 		{
