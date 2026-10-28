@@ -364,7 +364,7 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 		return;
 	}
 
-	// Resolve the prompt again on the server because the client's prompt or requested action may be stale or forged.
+	// Recalculate the actor's current interaction data on the server because the client's data or requested action may be stale or forged.
 	const FInteractionPromptData ServerPromptData = IInteractable::Execute_GetInteractionPrompt(TargetActor, this);
 	if (!ActionId.IsNone())
 	{
