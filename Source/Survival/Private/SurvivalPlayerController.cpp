@@ -333,18 +333,21 @@ void ASurvivalPlayerController::SelectInteractionOption(FName ActionId)
 
 void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActor, FName ActionId)
 {
+	// This RPC is the server-side entry point; clients may request an interaction but cannot execute it directly.
 	if (!HasAuthority())
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction because controller %s has no authority"), *GetName());
 		return;
 	}
 
+	// Revalidate the client-provided actor before calling any interaction interface methods on it.
 	if (!IsValidInteractionTarget(TargetActor))
 	{
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction because the target actor is invalid or not interactable"));
 		return;
 	}
 
+	// Trace again from the server's view so the client cannot interact with an actor it can no longer see or reach.
 	FVector ServerViewLocation;
 	FHitResult ServerHitResult;
 	if (!TraceInteraction(ServerHitResult, ServerViewLocation, FName(TEXT("ServerInteractTrace"))) || ServerHitResult.GetActor() != TargetActor)
@@ -352,6 +355,8 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 		UE_LOG(LogSurvivalPlayerController, Warning, TEXT("Rejected interaction with %s because the server trace did not reach the target"), *TargetActor->GetName());
 		return;
 	}
+
+	// Use the hit result's measured distance when available; otherwise calculate the distance to the exact impact point.
 	const float ServerHitDistance = ServerHitResult.Distance > 0.0f ? ServerHitResult.Distance : FVector::Distance(ServerViewLocation, ServerHitResult.ImpactPoint);
 	if (ServerHitDistance > InteractionDistance)
 	{
@@ -359,9 +364,11 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 		return;
 	}
 
+	// Resolve the prompt again on the server because the client's prompt or requested action may be stale or forged.
 	const FInteractionPromptData ServerPromptData = IInteractable::Execute_GetInteractionPrompt(TargetActor, this);
 	if (!ActionId.IsNone())
 	{
+		// An explicit action is valid only when the target currently advertises that action.
 		const bool bActionIsAvailable = ServerPromptData.Options.ContainsByPredicate([ActionId](const FInteractionOptionData& Option) { return Option.ActionId == ActionId; });
 		if (!bActionIsAvailable)
 		{
@@ -371,6 +378,7 @@ void ASurvivalPlayerController::ServerInteract_Implementation(AActor* TargetActo
 	}
 
 	UE_LOG(LogSurvivalPlayerController, Log, TEXT("Server interacting with target actor %s using action %s"), *TargetActor->GetName(), ActionId.IsNone() ? TEXT("Default") : *ActionId.ToString());
+	// No action ID preserves the simple interaction path; an explicit ID routes through the option-aware interface method.
 	if (ActionId.IsNone())
 	{
 		IInteractable::Execute_Interact(TargetActor, this);
