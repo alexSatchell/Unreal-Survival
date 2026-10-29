@@ -104,7 +104,13 @@ void USurvivalVitalComponent::SetCurrentHealth(const float NewHealth)
 		return;
 	}
 
-	CurrentHealth = FMath::Clamp(NewHealth, 0.0f, MaxHealth);
+	const float ClampedHealth = FMath::Clamp(NewHealth, 0.0f, MaxHealth);
+	if (FMath::IsNearlyEqual(CurrentHealth, ClampedHealth))
+	{
+		return;
+	}
+
+	CurrentHealth = ClampedHealth;
 	if (CurrentHealth <= 0.0f)
 	{
 		HandleDeath();
@@ -136,7 +142,13 @@ void USurvivalVitalComponent::SetCurrentHunger(const float NewHunger)
 		return;
 	}
 
-	CurrentHunger = FMath::Clamp(NewHunger, 0.0f, MaxHunger);
+	const float ClampedHunger = FMath::Clamp(NewHunger, 0.0f, MaxHunger);
+	if (FMath::IsNearlyEqual(CurrentHunger, ClampedHunger))
+	{
+		return;
+	}
+
+	CurrentHunger = ClampedHunger;
 	ApplyMovementPenalty();
 	BroadcastVitalsChanged();
 }
@@ -165,7 +177,13 @@ void USurvivalVitalComponent::SetCurrentHydration(const float NewHydration)
 		return;
 	}
 
-	CurrentHydration = FMath::Clamp(NewHydration, 0.0f, MaxHydration);
+	const float ClampedHydration = FMath::Clamp(NewHydration, 0.0f, MaxHydration);
+	if (FMath::IsNearlyEqual(CurrentHydration, ClampedHydration))
+	{
+		return;
+	}
+
+	CurrentHydration = ClampedHydration;
 	ApplyMovementPenalty();
 	BroadcastVitalsChanged();
 }
