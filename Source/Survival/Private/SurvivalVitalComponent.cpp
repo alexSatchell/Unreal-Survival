@@ -200,18 +200,25 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		return false;
 	}
 
+	// Keep illness severity within the normalized range used by the vitals UI and sickness calculations.
 	const float ClampedSeverity = FMath::Clamp(Severity, 0.0f, 1.0f);
 	for (FSurvivalIllnessState& Illness : ActiveIllnesses)
 	{
 		if (Illness.IllnessTag != IllnessTag)
 		{
+			// This is a different illness, so continue searching for an existing instance of the requested tag.
 			continue;
 		}
 
+		// Reapplying an existing illness updates that entry instead of adding a duplicate illness state.
 		const float PreviousSeverity = Illness.Severity;
 		const float PreviousDuration = Illness.RemainingDurationGameSeconds;
+		// Reapplying an illness can increase its severity, but should never weaken the existing illness.
 		Illness.Severity = FMath::Max(Illness.Severity, ClampedSeverity);
-		Illness.RemainingDurationGameSeconds = Illness.RemainingDurationGameSeconds <= 0.0f || DurationGameSeconds <= 0.0f ? 0.0f : FMath::Max(Illness.RemainingDurationGameSeconds, DurationGameSeconds);
+		// A duration of zero means the illness persists until cured; if either duration is permanent, keep it permanent.
+		const bool bIsPermanent = Illness.RemainingDurationGameSeconds <= 0.0f || DurationGameSeconds <= 0.0f;
+		Illness.RemainingDurationGameSeconds = bIsPermanent ? 0.0f : FMath::Max(Illness.RemainingDurationGameSeconds, DurationGameSeconds);
+		// Only notify listeners when reapplying the illness changed its severity or remaining duration.
 		const bool bChanged = !FMath::IsNearlyEqual(PreviousSeverity, Illness.Severity) || !FMath::IsNearlyEqual(PreviousDuration, Illness.RemainingDurationGameSeconds);
 		if (bChanged)
 		{
@@ -220,6 +227,7 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		return bChanged;
 	}
 
+	// No matching tag exists, so create the first active state for this illness.
 	FSurvivalIllnessState NewIllness;
 	NewIllness.IllnessTag = IllnessTag;
 	NewIllness.Severity = ClampedSeverity;
