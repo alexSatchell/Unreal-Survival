@@ -314,45 +314,60 @@ void USurvivalVitalComponent::RestoreSnapshot(const FSurvivalVitalSnapshot& Snap
 
 void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSeconds)
 {
+	// Only the authoritative living character can process time-based survival effects.
 	if (!GetOwner() || !GetOwner()->HasAuthority() || InElapsedGameSeconds <= 0.0f || bHasHandledDeath)
 	{
 		return;
 	}
 
 	const USurvivalGameplayData* SurvivalData = GetGameplayData();
+	// Ensure the day length is a safe divisor even if the configured value is invalid.
 	const float GameDayDuration = FMath::Max(SurvivalData->GameDayDurationSeconds, 1.0f);
+	// Moving increases the amount of hunger and hydration drained during this time slice.
 	const float ActivityMultiplier = GetActivityMultiplier();
+	// Convert elapsed time into the fraction of a game day that should be drained this update.
 	const float DrainScale = InElapsedGameSeconds / GameDayDuration * ActivityMultiplier;
 	const float PreviousHunger = CurrentHunger;
 	const float PreviousHydration = CurrentHydration;
+	// Apply each vital's configured per-day drain, clamping at zero so values cannot become negative.
 	CurrentHunger = FMath::Clamp(CurrentHunger - SurvivalData->HungerDrainPerGameDay * DrainScale, 0.0f, MaxHunger);
 	CurrentHydration = FMath::Clamp(CurrentHydration - SurvivalData->HydrationDrainPerGameDay * DrainScale, 0.0f, MaxHydration);
 
+	// Iterate backward because expired illnesses may be removed from the array while it is being traversed.
 	for (int32 Index = ActiveIllnesses.Num() - 1; Index >= 0; --Index)
 	{
 		FSurvivalIllnessState& Illness = ActiveIllnesses[Index];
 		if (Illness.RemainingDurationGameSeconds > 0.0f)
 		{
+			// Timed illnesses count down with world time; a zero duration remains permanent until cured.
 			Illness.RemainingDurationGameSeconds = FMath::Max(0.0f, Illness.RemainingDurationGameSeconds - InElapsedGameSeconds);
 			if (Illness.RemainingDurationGameSeconds <= 0.0f)
 			{
+				// Remove the illness once its countdown reaches zero.
 				ActiveIllnesses.RemoveAt(Index);
 			}
 		}
 	}
 
+	// Count how many tracked vitals are empty so each empty vital can contribute damage.
 	const int32 EmptyVitalCount = (CurrentHunger <= 0.0f ? 1 : 0) + (CurrentHydration <= 0.0f ? 1 : 0);
+	// Empty-vital damage uses the same per-day scaling as hunger and hydration drain.
 	const float EmptyVitalDamage = EmptyVitalCount * SurvivalData->EmptyVitalHealthDamagePerGameDay * DrainScale;
+	// Sickness damage is based on total illness severity and the fraction of a game day that elapsed.
 	const float SicknessDamage = GetSicknessSeverityTotal() * SurvivalData->SicknessHealthDamagePerGameDay * InElapsedGameSeconds / GameDayDuration;
 	const float PreviousHealth = CurrentHealth;
+	// Apply both damage sources together, keeping health within its valid range.
 	CurrentHealth = FMath::Clamp(CurrentHealth - EmptyVitalDamage - SicknessDamage, 0.0f, MaxHealth);
 
+	// Hunger or hydration reaching zero may change the character's movement speed.
 	ApplyMovementPenalty();
 	if (CurrentHealth <= 0.0f)
 	{
+		// Transition the character into the handled-death state once health reaches zero.
 		HandleDeath();
 	}
 
+	// Notify the HUD only when a tracked value changed or damage was processed during this update.
 	if (!FMath::IsNearlyEqual(PreviousHunger, CurrentHunger) || !FMath::IsNearlyEqual(PreviousHydration, CurrentHydration) || !FMath::IsNearlyEqual(PreviousHealth, CurrentHealth) || EmptyVitalCount > 0 || SicknessDamage > 0.0f)
 	{
 		BroadcastVitalsChanged();
@@ -361,26 +376,33 @@ void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSecon
 
 void USurvivalVitalComponent::ApplyActivityCost(const float InCost)
 {
+	// Activity costs are authoritative, must be positive, and stop once this character has handled death.
 	if (!GetOwner() || !GetOwner()->HasAuthority() || InCost <= 0.0f || bHasHandledDeath)
 	{
 		return;
 	}
 
 	const USurvivalGameplayData* SurvivalData = GetGameplayData();
+	// Remember whether either vital was already empty before this activity occurred.
 	const bool bWasHungerEmpty = CurrentHunger <= 0.0f;
 	const bool bWasHydrationEmpty = CurrentHydration <= 0.0f;
+	// FMath::Max selects the larger value, so subtracting the cost cannot take either vital below zero.
 	CurrentHunger = FMath::Max(CurrentHunger - InCost, 0.0f);
 	CurrentHydration = FMath::Max(CurrentHydration - InCost, 0.0f);
 	if (bWasHungerEmpty || bWasHydrationEmpty)
 	{
+		// Continuing activity while already dehydrated or hungry causes the configured immediate health damage.
 		CurrentHealth = FMath::Max(CurrentHealth - SurvivalData->EmptyVitalActivityHealthDamage, 0.0f);
 	}
 
+	// Recalculate exhaustion movement speed after the activity cost changes the vitals.
 	ApplyMovementPenalty();
 	if (CurrentHealth <= 0.0f)
 	{
+		// Handle death immediately if the activity damage depleted health.
 		HandleDeath();
 	}
+	// Activity costs are immediate events, so broadcast the resulting state once.
 	BroadcastVitalsChanged();
 }
 
