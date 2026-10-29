@@ -245,18 +245,22 @@ bool USurvivalVitalComponent::TryCureIllnesses(const FGameplayTagContainer& Cure
 	}
 
 	const int32 PreviousCount = ActiveIllnesses.Num();
+	// Remove every active illness whose gameplay tag is covered by the supplied cure tags.
 	ActiveIllnesses.RemoveAll([&CureTags](const FSurvivalIllnessState& Illness) { return CureTags.HasTag(Illness.IllnessTag); });
 	if (PreviousCount == ActiveIllnesses.Num())
 	{
+		// No illness was removed, so there is no state change to replicate or broadcast.
 		return false;
 	}
 
+	// At least one illness was removed, so notify the HUD and other listeners.
 	BroadcastVitalsChanged();
 	return true;
 }
 
 float USurvivalVitalComponent::GetSicknessPercent() const
 {
+	// Combine active illness severity into the normalized value consumed by the sickness UI.
 	return FMath::Clamp(GetSicknessSeverityTotal(), 0.0f, 1.0f);
 }
 
@@ -264,6 +268,7 @@ void USurvivalVitalComponent::NotifyJumpActivity()
 {
 	if (const USurvivalGameplayData* SurvivalData = GetGameplayData())
 	{
+		// Jumping consumes the shared one-time activity cost from the survival rules asset.
 		ApplyActivityCost(SurvivalData->OneTimeActivityCost);
 	}
 }
@@ -272,6 +277,7 @@ void USurvivalVitalComponent::NotifyPunchActivity()
 {
 	if (const USurvivalGameplayData* SurvivalData = GetGameplayData())
 	{
+		// Punching currently uses the same one-time activity cost as jumping.
 		ApplyActivityCost(SurvivalData->OneTimeActivityCost);
 	}
 }
@@ -279,6 +285,7 @@ void USurvivalVitalComponent::NotifyPunchActivity()
 FSurvivalVitalSnapshot USurvivalVitalComponent::CaptureSnapshot() const
 {
 	FSurvivalVitalSnapshot Snapshot;
+	// Copy all mutable vital state, including illnesses, so a failed transaction can be rolled back exactly.
 	Snapshot.Health = CurrentHealth;
 	Snapshot.Hunger = CurrentHunger;
 	Snapshot.Hydration = CurrentHydration;
@@ -293,11 +300,14 @@ void USurvivalVitalComponent::RestoreSnapshot(const FSurvivalVitalSnapshot& Snap
 		return;
 	}
 
+	// Restore the complete server-side state in one operation instead of triggering separate setter broadcasts.
 	CurrentHealth = FMath::Clamp(Snapshot.Health, 0.0f, MaxHealth);
 	CurrentHunger = FMath::Clamp(Snapshot.Hunger, 0.0f, MaxHunger);
 	CurrentHydration = FMath::Clamp(Snapshot.Hydration, 0.0f, MaxHydration);
 	ActiveIllnesses = Snapshot.ActiveIllnesses;
+	// Keep the death guard consistent with the restored health value.
 	bHasHandledDeath = CurrentHealth <= 0.0f;
+	// Recalculate derived movement state and notify listeners once after the full rollback is complete.
 	ApplyMovementPenalty();
 	BroadcastVitalsChanged();
 }
