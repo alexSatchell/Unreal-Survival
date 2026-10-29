@@ -12,45 +12,56 @@ DEFINE_LOG_CATEGORY_STATIC(LogSurvivalVital, Log, All);
 
 USurvivalVitalComponent::USurvivalVitalComponent()
 {
+	// Components do not use the actor's bReplicates property directly; this marks this component for replication when its owner replicates.
 	SetIsReplicatedByDefault(true);
 }
 
 void USurvivalVitalComponent::BeginPlay()
 {
+	// Let the engine initialize the component before we cache owner-dependent state or bind delegates.
 	Super::BeginPlay();
 
 	if (ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner()))
 	{
 		if (CharacterOwner->GetCharacterMovement())
 		{
+			// Preserve the character's authored movement speed so exhaustion can temporarily apply a multiplier and later restore it.
 			NormalMovementSpeed = CharacterOwner->GetCharacterMovement()->MaxWalkSpeed;
 		}
 	}
 
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
+		// Only the server initializes and mutates authoritative vital values; clients receive the replicated results.
 		const USurvivalGameplayData* SurvivalData = GetGameplayData();
+		// Characters begin at full health, while hunger and hydration start within the configured ranges.
 		CurrentHealth = FMath::Clamp(MaxHealth, 0.0f, MaxHealth);
 		CurrentHunger = FMath::FRandRange(SurvivalData->StartingHungerMinimum, SurvivalData->StartingHungerMaximum);
 		CurrentHydration = FMath::FRandRange(SurvivalData->StartingHydrationMinimum, SurvivalData->StartingHydrationMaximum);
+		// Avoid starting with hunger and hydration effectively tied, which would make the initial state less varied.
 		for (int32 Attempt = 0; Attempt < 8 && FMath::Abs(CurrentHunger - CurrentHydration) < 1.0f; ++Attempt)
 		{
+			// Retry hydration a limited number of times if the random values are within one point of each other.
 			CurrentHydration = FMath::FRandRange(SurvivalData->StartingHydrationMinimum, SurvivalData->StartingHydrationMaximum);
 		}
 		if (FMath::Abs(CurrentHunger - CurrentHydration) < 1.0f)
 		{
+			// Guarantee a non-tied starting state if all random attempts still produced nearly equal values.
 			CurrentHydration = FMath::Clamp(CurrentHunger + 1.0f, SurvivalData->StartingHydrationMinimum, SurvivalData->StartingHydrationMaximum);
 			if (FMath::IsNearlyEqual(CurrentHunger, CurrentHydration))
 			{
+				// If the hydration range prevented that adjustment, move hunger in the opposite direction instead.
 				CurrentHunger = FMath::Clamp(CurrentHydration - 1.0f, SurvivalData->StartingHungerMinimum, SurvivalData->StartingHungerMaximum);
 			}
 		}
 
 		if (ASurvivalGameState* SurvivalGameState = GetWorld()->GetGameState<ASurvivalGameState>())
 		{
+			// Subscribe to the server's world-clock updates so hunger, hydration, sickness, and health decay with game time.
 			SurvivalGameState->OnWorldTimeAdvanced.AddUObject(this, &USurvivalVitalComponent::HandleWorldTimeAdvanced);
 		}
 
+		// Apply any starting movement penalty and notify local listeners that the initial values are ready.
 		ApplyMovementPenalty();
 		BroadcastVitalsChanged();
 	}
