@@ -127,6 +127,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void InitializeStartingVitals();
 	void ApplyWorldTimeDelta(float InElapsedGameSeconds);
 	void ApplyActivityCost(float InCost);
 	void BroadcastVitalsChanged();
