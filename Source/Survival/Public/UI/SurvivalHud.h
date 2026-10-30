@@ -16,6 +16,9 @@ class SURVIVAL_API ASurvivalHud : public AHUD
 {
 	GENERATED_BODY()
 
+protected:
+	virtual void BeginPlay() override;
+
 public:
 	void InitializeInteractionPrompt(TSubclassOf<UInteractionPromptWidget> InWidgetClass);
 	void InitializeInteractionMenuWidget();
@@ -24,10 +27,6 @@ public:
 	void SetInventoryOverlayVisible(bool bInVisible);
 	bool IsInventoryOverlayVisible() const;
 	void UpdateInteractionPrompt(const FInteractionPromptData& InPromptData, bool bInFocused, bool bInMenuOpen);
-	void LogLocalPlayerState() const;
-
-protected:
-	virtual void BeginPlay() override;
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Interaction|UI", meta = (ClampMin = "0.0", ClampMax = "1.0"))

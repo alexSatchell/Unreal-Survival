@@ -39,16 +39,20 @@ void ASurvivalGameMode::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// Accumulate frame time so the world clock advances from elapsed game time rather than from frame count.
 	WorldClockAccumulator += FMath::Max(DeltaSeconds, 0.0f);
+	// Wait until at least one second has elapsed before updating the clock to avoid unnecessary per-frame work.
 	if (WorldClockAccumulator < 1.0f)
 	{
 		return;
 	}
 
+	// Consume the accumulated time as one update and start measuring the next interval.
 	const float ElapsedSeconds = WorldClockAccumulator;
 	WorldClockAccumulator = 0.0f;
 	if (ASurvivalGameState* SurvivalGameState = GetGameState<ASurvivalGameState>())
 	{
+		// GameState owns and replicates the authoritative world time to connected clients.
 		SurvivalGameState->AdvanceWorldTime(ElapsedSeconds);
 	}
 }

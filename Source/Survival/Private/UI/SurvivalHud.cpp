@@ -5,10 +5,26 @@
 #include "Character/SurvivalCharacter.h"
 #include "UI/SurvivalInteractionMenuWidget.h"
 #include "UI/SurvivalInventoryOverlayWidget.h"
-#include "Core/SurvivalPlayerState.h"
 #include "UI/SurvivalVitalsWidget.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalHud, Log, All);
+
+void ASurvivalHud::BeginPlay()
+{
+	Super::BeginPlay();
+
+	APlayerController* OwningPlayerController = GetOwningPlayerController();
+	UE_LOG(LogSurvivalHud, Log, TEXT("HUD %s began play for owning player controller %s"), *GetName(), OwningPlayerController ? *OwningPlayerController->GetName() : TEXT("None"));
+	if (!OwningPlayerController || !OwningPlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	InitializeVitalsWidget(nullptr);
+	InitializeInventoryOverlayWidget(nullptr);
+	InitializeInteractionMenuWidget();
+	UE_LOG(LogSurvivalHud, Log, TEXT("Created code-built vitals and inventory overlays for %s"), *OwningPlayerController->GetName());
+}
 
 void ASurvivalHud::InitializeInteractionPrompt(TSubclassOf<UInteractionPromptWidget> InWidgetClass)
 {
@@ -78,7 +94,7 @@ void ASurvivalHud::InitializeVitalsWidget(TSubclassOf<USurvivalVitalsWidget> InW
 		return;
 	}
 
-TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
+	TSubclassOf<USurvivalVitalsWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalVitalsWidget::StaticClass();
@@ -108,7 +124,7 @@ void ASurvivalHud::InitializeInventoryOverlayWidget(TSubclassOf<USurvivalInvento
 		return;
 	}
 
-TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
+	TSubclassOf<USurvivalInventoryOverlayWidget> WidgetClass = InWidgetClass;
 	if (!WidgetClass)
 	{
 		WidgetClass = USurvivalInventoryOverlayWidget::StaticClass();
@@ -136,42 +152,4 @@ void ASurvivalHud::SetInventoryOverlayVisible(const bool bInVisible)
 bool ASurvivalHud::IsInventoryOverlayVisible() const
 {
 	return InventoryOverlayWidget && InventoryOverlayWidget->GetVisibility() == ESlateVisibility::Visible;
-}
-
-void ASurvivalHud::BeginPlay()
-{
-	Super::BeginPlay();
-
-	APlayerController* OwningPlayerController = GetOwningPlayerController();
-	UE_LOG(LogSurvivalHud, Log, TEXT("HUD %s began play for owning player controller %s"), *GetName(), OwningPlayerController ? *OwningPlayerController->GetName() : TEXT("None"));
-	if (!OwningPlayerController || !OwningPlayerController->IsLocalController())
-	{
-		return;
-	}
-
-	InitializeVitalsWidget(nullptr);
-	InitializeInventoryOverlayWidget(nullptr);
-	InitializeInteractionMenuWidget();
-	UE_LOG(LogSurvivalHud, Log, TEXT("Created code-built vitals and inventory overlays for %s"), *OwningPlayerController->GetName());
-	// LogLocalPlayerState();
-}
-
-void ASurvivalHud::LogLocalPlayerState() const
-{
-	const APlayerController* OwningPlayerController = GetOwningPlayerController();
-	if (!OwningPlayerController)
-	{
-		UE_LOG(LogSurvivalHud, Warning, TEXT("Could not log local PlayerState because the owning PlayerController is unavailable"));
-		return;
-	}
-
-	const ASurvivalPlayerState* SurvivalPlayerState = OwningPlayerController->GetPlayerState<ASurvivalPlayerState>();
-	if (!SurvivalPlayerState)
-	{
-		UE_LOG(LogSurvivalHud, Warning, TEXT("Could not log local PlayerState because ASurvivalPlayerState is unavailable"));
-		return;
-	}
-
-	const TCHAR* AliveState = SurvivalPlayerState->GetIsAlive() ? TEXT("true") : TEXT("false");
-	UE_LOG(LogSurvivalHud, Log, TEXT("Local PlayerState: PlayerName=%s Score=%.0f IsAlive=%s"), *SurvivalPlayerState->GetPlayerName(), SurvivalPlayerState->GetScore(), AliveState);
 }

@@ -38,16 +38,16 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_DefinitionAssetId, BlueprintReadOnly, Category = "Pickup")
 	FPrimaryAssetId DefinitionAssetId;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Pickup")
 	FText ReplicatedDisplayName;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup")
+	UPROPERTY(ReplicatedUsing = OnRep_PickupMesh, BlueprintReadOnly, Category = "Pickup")
 	TObjectPtr<UStaticMesh> ReplicatedPickupMesh;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup|Interaction")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Pickup|Interaction")
 	TArray<FInteractionOptionData> ReplicatedInteractionOptions;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PickupPresentation, BlueprintReadOnly, Category = "Pickup|Interaction")
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Pickup|Interaction")
 	FName ReplicatedDefaultActionId = NAME_None;
 
 	/** Adds a small interaction targeting margin in centimeters; this does not affect floor placement. */
@@ -68,10 +68,12 @@ private:
 	void OnRep_DefinitionAssetId();
 
 	UFUNCTION()
-	void OnRep_PickupPresentation();
+	void OnRep_PickupMesh();
 
 	USurvivalItemDefinition* GetItemDefinition() const;
+	void ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition);
 	void ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition);
+	void UpdatePickupMesh();
 	void UpdateCollisionBounds();
 	bool TryStoreItem(AController* InteractingController);
 	bool TryConsumeItem(AController* InteractingController);

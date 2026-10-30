@@ -148,6 +148,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void InitializeStartingVitals();
 	void ApplyWorldTimeDelta(float InElapsedGameSeconds);
 	bool ApplySicknessRecovery(float InElapsedGameSeconds);
 	void ApplyActivityCost(float InCost);

@@ -33,17 +33,7 @@ APickup::APickup()
 void APickup::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (IsValid(ItemDefinition))
-	{
-		DefinitionAssetId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-		ReplicatedInteractionOptions.Reset();
-		ItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-		ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	}
-
-	ApplyItemPresentation(ItemDefinition);
+	ApplyItemDefinitionState(ItemDefinition);
 }
 
 void APickup::BeginPlay()
@@ -54,22 +44,12 @@ void APickup::BeginPlay()
 		return;
 	}
 
-	if (IsValid(ItemDefinition))
-	{
-		DefinitionAssetId = ItemDefinition->GetPrimaryAssetId();
-		ReplicatedDisplayName = ItemDefinition->DisplayName;
-		ReplicatedPickupMesh = ItemDefinition->PickupMesh;
-		ReplicatedInteractionOptions.Reset();
-		ItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-		ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	}
+	ApplyItemDefinitionState(ItemDefinition);
 
 	if (!ItemInstanceId.IsValid())
 	{
 		ItemInstanceId = FGuid::NewGuid();
 	}
-
-	ApplyItemPresentation(GetItemDefinition());
 }
 
 USurvivalItemDefinition* APickup::GetItemDefinition() const
@@ -82,6 +62,29 @@ USurvivalItemDefinition* APickup::GetItemDefinition() const
 	return nullptr;
 }
 
+void APickup::ApplyItemDefinitionState(USurvivalItemDefinition* InItemDefinition)
+{
+	if (!IsValid(InItemDefinition))
+	{
+		// Clear the visible presentation so an invalid definition cannot leave an old mesh or collision volume behind.
+		ApplyItemPresentation(nullptr);
+		return;
+	}
+
+	// Copy the definition's stable identity and display data into the pickup state that can be replicated to clients.
+	DefinitionAssetId = InItemDefinition->GetPrimaryAssetId();
+	ReplicatedDisplayName = InItemDefinition->DisplayName;
+	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
+
+	// Ask the definition to build the actions this item supports, such as Store for all items or Consume for consumables.
+	ReplicatedInteractionOptions.Reset();
+	InItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
+	ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
+
+	// Apply the definition's mesh and resize the interaction volume to match it.
+	ApplyItemPresentation(InItemDefinition);
+}
+
 void APickup::ApplyItemPresentation(USurvivalItemDefinition* InItemDefinition)
 {
 	MeshComponent->SetStaticMesh(IsValid(InItemDefinition) ? InItemDefinition->PickupMesh : nullptr);
@@ -92,6 +95,7 @@ void APickup::UpdateCollisionBounds()
 {
 	if (!MeshComponent || !CollisionComponent || !MeshComponent->GetStaticMesh())
 	{
+		// Without a mesh, use a centered fallback volume so the pickup still has a predictable query area.
 		CollisionComponent->SetRelativeLocation(FVector::ZeroVector);
 		CollisionComponent->SetBoxExtent(FVector(50.0f));
 		return;
@@ -100,18 +104,25 @@ void APickup::UpdateCollisionBounds()
 	FVector BoundsMin;
 	FVector BoundsMax;
 	MeshComponent->GetLocalBounds(BoundsMin, BoundsMax);
-	// Keep the pickup volume close to the visible mesh; the controller's sphere sweep provides forgiving targeting.
+
+	// Move the sibling collision component to the center of the mesh's local-space bounds.
 	CollisionComponent->SetRelativeLocation((BoundsMin + BoundsMax) * 0.5f);
+
+	// SetBoxExtent expects half-extents, so add the configured padding to each side of the mesh bounds.
 	CollisionComponent->SetBoxExtent((BoundsMax - BoundsMin) * 0.5f + CollisionPadding);
 }
 
 void APickup::OnRep_DefinitionAssetId()
 {
-	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
-	UpdateCollisionBounds();
+	UpdatePickupMesh();
 }
 
-void APickup::OnRep_PickupPresentation()
+void APickup::OnRep_PickupMesh()
+{
+	UpdatePickupMesh();
+}
+
+void APickup::UpdatePickupMesh()
 {
 	MeshComponent->SetStaticMesh(ReplicatedPickupMesh);
 	UpdateCollisionBounds();
@@ -125,14 +136,8 @@ bool APickup::InitializeItemInstance(const FSurvivalItemInstance& InItemInstance
 	}
 
 	ItemInstanceId = InItemInstance.InstanceId;
-	DefinitionAssetId = InItemInstance.DefinitionAssetId;
 	ItemDefinition = InItemDefinition;
-	ReplicatedDisplayName = InItemDefinition->DisplayName;
-	ReplicatedPickupMesh = InItemDefinition->PickupMesh;
-	ReplicatedInteractionOptions.Reset();
-	InItemDefinition->GetWorldInteractionOptions(ReplicatedInteractionOptions);
-	ReplicatedDefaultActionId = ReplicatedInteractionOptions.Num() > 0 ? ReplicatedInteractionOptions[0].ActionId : NAME_None;
-	ApplyItemPresentation(InItemDefinition);
+	ApplyItemDefinitionState(InItemDefinition);
 	ForceNetUpdate();
 	return true;
 }
@@ -236,15 +241,16 @@ bool APickup::TryConsumeItem(AController* InteractingController)
 	}
 
 	const FString PickupName = GetName();
-	if (!Destroy())
+	const bool bDestroySucceeded = Destroy();
+	if (bDestroySucceeded || IsActorBeingDestroyed())
 	{
-		SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
-		UE_LOG(LogPickup, Warning, TEXT("Rejected consume action because pickup %s could not be destroyed"), *PickupName);
-		return false;
+		UE_LOG(LogPickup, Log, TEXT("Consumed %s directly from pickup for %s"), *ConsumableItemDefinition->GetName(), *SurvivalCharacter->GetName());
+		return true;
 	}
 
-	UE_LOG(LogPickup, Log, TEXT("Consumed %s directly from pickup for %s"), *ConsumableItemDefinition->GetName(), *SurvivalCharacter->GetName());
-	return true;
+	SurvivalVitalComponent->RestoreSnapshot(PreviousVitalState);
+	UE_LOG(LogPickup, Warning, TEXT("Rejected consume action because pickup %s could not be destroyed"), *PickupName);
+	return false;
 }
 
 FInteractionPromptData APickup::GetInteractionPrompt_Implementation(AController*) const
