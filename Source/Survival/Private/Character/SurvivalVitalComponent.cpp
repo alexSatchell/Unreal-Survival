@@ -139,6 +139,7 @@ bool USurvivalVitalComponent::TryRestoreHydration(const float Amount)
 
 	const float PreviousHydration = CurrentHydration;
 	SetCurrentHydration(CurrentHydration + Amount);
+	// A full hydration meter still counts as a successful hydration effect so the same consumable can provide sickness recovery or other benefits.
 	return Amount > 0.0f && (CurrentHydration > PreviousHydration || FMath::IsNearlyEqual(CurrentHydration, MaxHydration));
 }
 
@@ -166,17 +167,21 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		return false;
 	}
 
+	// Illness severity is stored as points from 0 to 100; the HUD converts the total back to a 0-to-1 percentage.
 	const float ClampedSeverity = FMath::Clamp(Severity, 0.0f, 100.0f);
 	for (FSurvivalIllnessState& Illness : ActiveIllnesses)
 	{
 		if (Illness.IllnessTag != IllnessTag)
 		{
+			// Keep searching until the requested illness tag is found.
 			continue;
 		}
 
 		const float PreviousSeverity = Illness.Severity;
 		const float PreviousDuration = Illness.RemainingDurationGameSeconds;
+		// Reapplying an illness adds severity, but the normalized severity cannot exceed 100 points.
 		Illness.Severity = FMath::Clamp(Illness.Severity + ClampedSeverity, 0.0f, 100.0f);
+		// A zero duration remains permanent; otherwise retain the longer of the existing and incoming durations.
 		Illness.RemainingDurationGameSeconds = Illness.RemainingDurationGameSeconds <= 0.0f || DurationGameSeconds <= 0.0f ? 0.0f : FMath::Max(Illness.RemainingDurationGameSeconds, DurationGameSeconds);
 		const bool bChanged = !FMath::IsNearlyEqual(PreviousSeverity, Illness.Severity) || !FMath::IsNearlyEqual(PreviousDuration, Illness.RemainingDurationGameSeconds);
 		if (bChanged)
@@ -186,6 +191,7 @@ bool USurvivalVitalComponent::TryApplyIllness(const FGameplayTag IllnessTag, con
 		return true;
 	}
 
+	// No matching illness exists, so create a new active illness state.
 	FSurvivalIllnessState NewIllness;
 	NewIllness.IllnessTag = IllnessTag;
 	NewIllness.Severity = ClampedSeverity;
@@ -202,11 +208,15 @@ bool USurvivalVitalComponent::TryApplySicknessRecovery(const FGameplayTagContain
 		return false;
 	}
 
+	// Store recovery as a timed effect instead of removing severity immediately; world-time updates apply it gradually.
 	FSurvivalSicknessRecoveryState NewRecovery;
 	NewRecovery.RecoveryTags = RecoveryTags;
+	// Recovery points use the same 0-to-100 scale as illness severity.
 	NewRecovery.RemainingRecoveryPoints = FMath::Clamp(RecoveryPoints, 0.0f, 100.0f);
+	// Spread the available recovery points evenly across the requested game-time duration.
 	NewRecovery.RecoveryRatePointsPerGameSecond = NewRecovery.RemainingRecoveryPoints / DurationGameSeconds;
 	ActiveSicknessRecoveries.Add(MoveTemp(NewRecovery));
+	// The effect was accepted and will be processed by ApplySicknessRecovery during future time updates.
 	return true;
 }
 
@@ -231,6 +241,7 @@ bool USurvivalVitalComponent::TryCureIllnesses(const FGameplayTagContainer& Cure
 
 float USurvivalVitalComponent::GetSicknessPercent() const
 {
+	// Convert the 0-to-100 severity scale into the normalized 0-to-1 value used by the HUD.
 	return FMath::Clamp(GetSicknessSeverityTotal() / 100.0f, 0.0f, 1.0f);
 }
 
@@ -331,27 +342,34 @@ void USurvivalVitalComponent::ApplyWorldTimeDelta(const float InElapsedGameSecon
 bool USurvivalVitalComponent::ApplySicknessRecovery(const float InElapsedGameSeconds)
 {
 	bool bChanged = false;
+	// Process recovery effects backward because completed effects may be removed from the array.
 	for (int32 RecoveryIndex = ActiveSicknessRecoveries.Num() - 1; RecoveryIndex >= 0; --RecoveryIndex)
 	{
 		FSurvivalSicknessRecoveryState& Recovery = ActiveSicknessRecoveries[RecoveryIndex];
+		// Limit this update to both the recovery points remaining and the rate for the elapsed time slice.
 		float RemainingToApply = FMath::Min(Recovery.RemainingRecoveryPoints, Recovery.RecoveryRatePointsPerGameSecond * InElapsedGameSeconds);
 		const float RequestedRecovery = RemainingToApply;
+		// Distribute this update across every matching active illness until the recovery budget is exhausted.
 		for (int32 IllnessIndex = ActiveIllnesses.Num() - 1; IllnessIndex >= 0 && RemainingToApply > KINDA_SMALL_NUMBER; --IllnessIndex)
 		{
 			FSurvivalIllnessState& Illness = ActiveIllnesses[IllnessIndex];
 			if (!Recovery.RecoveryTags.HasTag(Illness.IllnessTag))
 			{
+				// This recovery effect does not apply to the current illness tag.
 				continue;
 			}
 
+			// Do not apply recovery beyond the portion of this illness that exists during the current time slice.
 			const float AvailableSeconds = Illness.RemainingDurationGameSeconds > 0.0f ? FMath::Min(InElapsedGameSeconds, Illness.RemainingDurationGameSeconds) : InElapsedGameSeconds;
 			const float AvailableRecovery = Recovery.RecoveryRatePointsPerGameSecond * AvailableSeconds;
+			// Limit recovery by the remaining budget, available time, and illness severity.
 			const float AppliedRecovery = FMath::Min3(RemainingToApply, AvailableRecovery, Illness.Severity);
 			if (AppliedRecovery <= 0.0f)
 			{
 				continue;
 			}
 
+			// Reduce severity by the amount applied and remove the illness when it is effectively cured.
 			Illness.Severity = FMath::Max(0.0f, Illness.Severity - AppliedRecovery);
 			RemainingToApply -= AppliedRecovery;
 			bChanged = true;
@@ -361,7 +379,9 @@ bool USurvivalVitalComponent::ApplySicknessRecovery(const float InElapsedGameSec
 			}
 		}
 
+		// Consume only the recovery points that were actually applied this update.
 		Recovery.RemainingRecoveryPoints = FMath::Max(0.0f, Recovery.RemainingRecoveryPoints - (RequestedRecovery - RemainingToApply));
+		// Stop tracking recovery when its budget is spent or no matching illness remains.
 		if (Recovery.RemainingRecoveryPoints <= KINDA_SMALL_NUMBER || !HasMatchingIllness(Recovery.RecoveryTags))
 		{
 			ActiveSicknessRecoveries.RemoveAt(RecoveryIndex);
