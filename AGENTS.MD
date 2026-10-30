@@ -64,6 +64,10 @@ Follow Epic's [C++ Coding Standard for Unreal Engine](https://dev.epicgames.com/
 - Treat hover documentation as part of the feature: add or update the tooltip whenever an exposed property is added or its behavior changes.
 - For transformable actors, use a valid `USceneComponent` root so the standard Actor Transform fields remain available in the Details panel.
 
+### Change Verification
+
+- Do not compile the full Unreal project just to test routine changes. A focused check in the scratchpad is sufficient unless a full build is specifically requested.
+
 ## Output style
 
 The reader has ADHD. Shape every response so it can be acted on:
