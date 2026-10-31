@@ -8,7 +8,8 @@
 #include "Items/SurvivalConsumableItemDefinition.h"
 #include "Inventory/SurvivalInventoryComponent.h"
 #include "Loot/SurvivalLootTable.h"
-#include "Loot/SurvivalLootWorldSubsystem.h"
+#include "Core/SurvivalGameMode.h"
+#include "Loot/SurvivalLootManagerComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalLootContainer, Log, All);
 
@@ -38,7 +39,10 @@ void ASurvivalLootContainer::BeginPlay()
 	Super::BeginPlay();
 	if (UWorld* World = GetWorld())
 	{
-		World->GetSubsystem<USurvivalLootWorldSubsystem>()->RegisterContainer(this);
+		if (ASurvivalGameMode* GameMode = World->GetAuthGameMode<ASurvivalGameMode>())
+		{
+			GameMode->GetLootManager()->RegisterContainer(this);
+		}
 	}
 }
 
@@ -46,7 +50,10 @@ void ASurvivalLootContainer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetSubsystem<USurvivalLootWorldSubsystem>()->UnregisterContainer(this);
+		if (ASurvivalGameMode* GameMode = World->GetAuthGameMode<ASurvivalGameMode>())
+		{
+			GameMode->GetLootManager()->UnregisterContainer(this);
+		}
 	}
 	Super::EndPlay(EndPlayReason);
 }

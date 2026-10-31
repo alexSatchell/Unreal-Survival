@@ -4,7 +4,8 @@
 #include "Loot/SurvivalLootTable.h"
 #include "Items/Pickup.h"
 #include "Items/SurvivalItemDefinition.h"
-#include "Loot/SurvivalLootWorldSubsystem.h"
+#include "Core/SurvivalGameMode.h"
+#include "Loot/SurvivalLootManagerComponent.h"
 
 ASurvivalLootSpawnPoint::ASurvivalLootSpawnPoint()
 {
@@ -23,7 +24,10 @@ void ASurvivalLootSpawnPoint::BeginPlay()
 	Super::BeginPlay();
 	if (const UWorld* World = GetWorld())
 	{
-		World->GetSubsystem<USurvivalLootWorldSubsystem>()->RegisterSpawnPoint(this);
+		if (ASurvivalGameMode* GameMode = World->GetAuthGameMode<ASurvivalGameMode>())
+		{
+			GameMode->GetLootManager()->RegisterSpawnPoint(this);
+		}
 	}
 }
 
@@ -31,7 +35,10 @@ void ASurvivalLootSpawnPoint::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (const UWorld* World = GetWorld())
 	{
-		World->GetSubsystem<USurvivalLootWorldSubsystem>()->UnregisterSpawnPoint(this);
+		if (ASurvivalGameMode* GameMode = World->GetAuthGameMode<ASurvivalGameMode>())
+		{
+			GameMode->GetLootManager()->UnregisterSpawnPoint(this);
+		}
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -46,6 +53,13 @@ void ASurvivalLootSpawnPoint::HandleActivePickupDestroyed(AActor* DestroyedActor
 	if (ActivePickup == DestroyedActor)
 	{
 		ActivePickup = nullptr;
+		if (UWorld* World = GetWorld())
+		{
+			if (ASurvivalGameMode* GameMode = World->GetAuthGameMode<ASurvivalGameMode>())
+			{
+				GameMode->GetLootManager()->ScheduleEmptySpawnPoint(this);
+			}
+		}
 	}
 }
 

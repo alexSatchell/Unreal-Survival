@@ -20,7 +20,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Time", meta = (ClampMin = "0.0", UIMin = "0.0", ToolTip = "World-clock time at which a new game starts, measured in seconds from the beginning of the day."))
 	float StartingWorldTimeSeconds = 0.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1.0", UIMin = "1.0", ToolTip = "In-game seconds between loot refill evaluations. Empty points may refill after this interval."))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot", meta = (ClampMin = "1.0", UIMin = "1.0", ToolTip = "In-game seconds between evaluations of searched, empty loot containers. Minimum 1; unsearched or nonempty containers are unchanged."))
 	float LootRecycleIntervalGameSeconds = 7200.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Vitals|Starting Values", meta = (ClampMin = "0.0", ClampMax = "100.0", UIMin = "0.0", UIMax = "100.0", ToolTip = "Lowest random hunger value assigned when a player spawns."))

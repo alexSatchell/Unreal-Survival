@@ -27,10 +27,10 @@ public:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot", meta = (ToolTip = "Loot table rolled when this point is populated. Leave empty to disable spawning at this point."))
 	TObjectPtr<USurvivalLootTable> LootTable;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot|Recycling", meta = (ToolTip = "Enables this point to respawn one pickup after its configured real-time interval. Disabled points only populate initially."))
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot|Recycling", meta = (ToolTip = "Enables retries after a pickup is collected or a roll is empty. Disabled points only roll once on registration."))
 	bool bEnableRecycling = true;
 
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot|Recycling", meta = (ClampMin = "1.0", UIMin = "1.0", ToolTip = "Real-world seconds between recycle checks for this point. Use 60 for a one-minute test interval; 3600 is one real-time hour."))
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Loot|Recycling", meta = (ClampMin = "1.0", UIMin = "1.0", ToolTip = "Minimum real seconds after collection or an empty roll before retrying. Batch scheduling can add a delay. 3600 is one real-time hour."))
 	float RecycleIntervalRealSeconds = 3600.0f;
 
 	bool HasContents() const;

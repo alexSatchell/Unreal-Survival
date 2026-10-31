@@ -5,17 +5,41 @@
 #include "UI/SurvivalHud.h"
 #include "Interaction/SurvivalPlayerController.h"
 #include "Core/SurvivalPlayerState.h"
+#include "Loot/SurvivalLootManagerComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSurvivalGameMode, Log, All);
 
 ASurvivalGameMode::ASurvivalGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	LootManager = CreateDefaultSubobject<USurvivalLootManagerComponent>(TEXT("LootManager"));
 	DefaultPawnClass = ASurvivalCharacter::StaticClass();
 	GameStateClass = ASurvivalGameState::StaticClass();
 	HUDClass = ASurvivalHud::StaticClass();
 	PlayerControllerClass = ASurvivalPlayerController::StaticClass();
 	PlayerStateClass = ASurvivalPlayerState::StaticClass();
+}
+
+void ASurvivalGameMode::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)
+{
+	if (LootManager && !LootManager->IsInitialPopulationComplete())
+	{
+		PlayersWaitingForLoot.AddUnique(NewPlayer);
+		return;
+	}
+	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
+}
+
+void ASurvivalGameMode::HandleInitialLootReady()
+{
+	for (const TWeakObjectPtr<APlayerController>& Player : PlayersWaitingForLoot)
+	{
+		if (Player.IsValid())
+		{
+			Super::HandleStartingNewPlayer_Implementation(Player.Get());
+		}
+	}
+	PlayersWaitingForLoot.Reset();
 }
 
 const USurvivalGameplayData* ASurvivalGameMode::GetGameplayData() const
