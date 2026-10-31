@@ -14,14 +14,14 @@ ASurvivalLootSpawnPoint::ASurvivalLootSpawnPoint()
 	PlacementMarker->SetArrowColor(FLinearColor(0.1f, 0.8f, 1.0f, 1.0f));
 	PlacementMarker->SetHiddenInGame(true);
 	RootComponent = PlacementMarker;
-	SetActorHiddenInGame(true);
+	AActor::SetActorHiddenInGame(true);
 	SetCanBeDamaged(false);
 }
 
 void ASurvivalLootSpawnPoint::BeginPlay()
 {
 	Super::BeginPlay();
-	if (UWorld* World = GetWorld())
+	if (const UWorld* World = GetWorld())
 	{
 		World->GetSubsystem<USurvivalLootWorldSubsystem>()->RegisterSpawnPoint(this);
 	}
@@ -29,7 +29,7 @@ void ASurvivalLootSpawnPoint::BeginPlay()
 
 void ASurvivalLootSpawnPoint::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (UWorld* World = GetWorld())
+	if (const UWorld* World = GetWorld())
 	{
 		World->GetSubsystem<USurvivalLootWorldSubsystem>()->UnregisterSpawnPoint(this);
 	}
